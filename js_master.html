@@ -1,0 +1,520 @@
+<script>
+/* ============================================================
+   หน้า: สินค้า
+   ============================================================ */
+SP.pages.products = function () {
+  return SP.api('apiListProducts').then(function (r) {
+    var list = r.data || [];
+    SP._products = list;
+
+    var head =
+      '\x3cbutton class="btn btn-sm btn-light" id="pdImport">\x3ci class="bi bi-upload">\x3c/i> นำเข้า CSV\x3c/button> ' +
+      '\x3cbutton class="btn btn-sm btn-light" id="pdExport">\x3ci class="bi bi-download">\x3c/i> ส่งออก\x3c/button> ' +
+      '\x3cbutton class="btn btn-sm btn-primary" id="pdAdd">\x3ci class="bi bi-plus-lg">\x3c/i> เพิ่มสินค้า\x3c/button>';
+
+    var filter = '\x3cdiv class="filter-row mb-3">' +
+      '\x3cdiv class="fi flex-grow-1">\x3clabel class="form-label">ค้นหา\x3c/label>' +
+      '\x3cinput id="pdQ" class="form-control" placeholder="รหัส / ชื่อสินค้า / บาร์โค้ด">\x3c/div>' +
+      '\x3cdiv class="fi">\x3clabel class="form-label">หมวด\x3c/label>\x3cselect id="pdCat" class="form-select">' +
+      '\x3coption value="">ทุกหมวด\x3c/option>' +
+      (SP.boot.categories || []).map(function (c) {
+        return '\x3coption value="' + SP.esc(c.id) + '">' + SP.esc(c.name) + '\x3c/option>';
+      }).join('') + '\x3c/select>\x3c/div>' +
+      '\x3cdiv class="fi">\x3clabel class="form-label">แสดง\x3c/label>\x3cselect id="pdF" class="form-select">' +
+      '\x3coption value="">ทั้งหมด\x3c/option>' +
+      '\x3coption value="low">ต่ำกว่าขั้นต่ำ\x3c/option>' +
+      '\x3coption value="zero">คงเหลือ 0\x3c/option>' +
+      '\x3coption value="nobc">ยังไม่มีบาร์โค้ด\x3c/option>' +
+      '\x3c/select>\x3c/div>\x3c/div>';
+
+    SP.render(filter + SP.card('รายการสินค้า', '\x3cdiv id="pdTable">\x3c/div>', head, true));
+
+    function draw() {
+      var q = String($('#pdQ').val() || '').toLowerCase();
+      var cat = $('#pdCat').val(), f = $('#pdF').val();
+      var rows = list.filter(function (p) {
+        if (cat && p.categoryId !== cat) return false;
+        if (f === 'low' && !(SP.n(p.minQty) > 0 && SP.n(p.qty) <= SP.n(p.minQty))) return false;
+        if (f === 'zero' && SP.n(p.qty) !== 0) return false;
+        if (f === 'nobc' && (p.barcodes || []).length > 0) return false;
+        if (q) {
+          var hay = (p.code + ' ' + p.name + ' ' +
+            (p.barcodes || []).map(function (b) { return b.barcode; }).join(' ')).toLowerCase();
+          if (hay.indexOf(q) === -1) return false;
+        }
+        return true;
+      });
+      if (!rows.length) { $('#pdTable').html(SP.empty('ไม่พบสินค้าตามเงื่อนไข', 'boxes')); return; }
+      var h = '\x3cdiv class="table-wrap">\x3ctable class="table-x">\x3cthead>\x3ctr>' +
+        '\x3cth>รหัส\x3c/th>\x3cth>สินค้า\x3c/th>\x3cth>หมวด\x3c/th>' +
+        '\x3cth class="text-num">คงเหลือ\x3c/th>\x3cth class="text-num">ขั้นต่ำ\x3c/th>' +
+        '\x3cth class="text-num">ทุนเฉลี่ย\x3c/th>\x3cth class="text-num">มูลค่า\x3c/th>' +
+        '\x3cth>บาร์โค้ด\x3c/th>\x3cth>\x3c/th>\x3c/tr>\x3c/thead>\x3ctbody>';
+      rows.forEach(function (p) {
+        var low = SP.n(p.minQty) > 0 && SP.n(p.qty) <= SP.n(p.minQty);
+        h += '\x3ctr>' +
+          '\x3ctd class="mono">' + SP.esc(p.code) + '\x3c/td>' +
+          '\x3ctd>\x3cdiv class="t-main">' + SP.esc(p.name) + '\x3c/div>' +
+          (p.trackLot ? '\x3cspan class="badge-x b-ct">ล็อต\x3c/span> ' : '') +
+          (p.trackSerial ? '\x3cspan class="badge-x b-tr">ซีเรียล\x3c/span> ' : '') +
+          (p.active === false ? '\x3cspan class="badge-x b-muted">ปิดใช้งาน\x3c/span>' : '') + '\x3c/td>' +
+          '\x3ctd>' + SP.esc(SP.catName(p.categoryId)) + '\x3c/td>' +
+          '\x3ctd class="text-num">' + (low ? '\x3cspan class="badge-x b-out">' + SP.fmt(p.qty) + '\x3c/span>' : SP.fmt(p.qty)) +
+          ' \x3cspan class="t-sub">' + SP.esc(p.unit) + '\x3c/span>\x3c/td>' +
+          '\x3ctd class="text-num t-sub">' + SP.fmt(p.minQty) + '\x3c/td>' +
+          '\x3ctd class="text-num">' + SP.money(p.avgCost) + '\x3c/td>' +
+          '\x3ctd class="text-num">' + SP.money(p.value) + '\x3c/td>' +
+          '\x3ctd>' + ((p.barcodes || []).length
+            ? '\x3cspan class="badge-x b-tr">' + p.barcodes.length + ' รหัส\x3c/span>'
+            : '\x3cspan class="badge-x b-muted">ไม่มี\x3c/span>') + '\x3c/td>' +
+          '\x3ctd class="text-end" style="white-space:nowrap">' +
+          '\x3cbutton class="btn btn-light btn-icon pdCard" data-id="' + SP.esc(p.id) + '" title="การ์ดสินค้า">\x3ci class="bi bi-card-list">\x3c/i>\x3c/button> ' +
+          '\x3cbutton class="btn btn-light btn-icon pdBc" data-id="' + SP.esc(p.id) + '" title="จัดการบาร์โค้ด">\x3ci class="bi bi-upc">\x3c/i>\x3c/button> ' +
+          '\x3cbutton class="btn btn-light btn-icon pdEdit" data-id="' + SP.esc(p.id) + '">\x3ci class="bi bi-pencil">\x3c/i>\x3c/button> ' +
+          '\x3cbutton class="btn btn-light btn-icon text-danger pdDel" data-id="' + SP.esc(p.id) + '">\x3ci class="bi bi-trash">\x3c/i>\x3c/button>' +
+          '\x3c/td>\x3c/tr>';
+      });
+      h += '\x3c/tbody>\x3c/table>\x3c/div>' +
+        '\x3cdiv class="total-bar">\x3cdiv>\x3cspan class="tb-label">พบ\x3c/span> \x3cspan class="tb-value">' +
+        SP.fmt(rows.length) + '\x3c/span> \x3cspan class="tb-label">รายการ\x3c/span>\x3c/div>' +
+        '\x3cdiv>\x3cspan class="tb-label">มูลค่ารวม\x3c/span> \x3cspan class="tb-value">' +
+        SP.money(rows.reduce(function (s, p) { return s + SP.n(p.value); }, 0)) + '\x3c/span>\x3c/div>\x3c/div>';
+      $('#pdTable').html(h);
+    }
+    draw();
+    $('#pdQ').on('input', draw);
+    $('#pdCat,#pdF').on('change', draw);
+
+    $('#pdAdd').on('click', function () { SP.productForm(null); });
+    $('#content').on('click', '.pdEdit', function () {
+      SP.productForm(list.filter(function (p) { return p.id === $(this).data('id'); }.bind(this))[0]);
+    });
+    $('#content').on('click', '.pdBc', function () {
+      var p = list.filter(function (x) { return x.id === $(this).data('id'); }.bind(this))[0];
+      SP.barcodeManage(p);
+    });
+    $('#content').on('click', '.pdCard', function () {
+      location.hash = '#stockcard?p=' + $(this).data('id');
+    });
+    $('#content').on('click', '.pdDel', function () {
+      var id = $(this).data('id');
+      var p = list.filter(function (x) { return x.id === id; })[0];
+      SP.ui.confirm('ลบสินค้า "' + p.name + '" ?', function () {
+        SP.busy(true);
+        SP.api('apiDeleteProduct', id)
+          .then(function (r) { SP.toast(r.message, 'ok'); SP.route(); })
+          .catch(function (e) { SP.toast(e.message, 'bad'); })
+          .then(function () { SP.busy(false); }, function () { SP.busy(false); });
+      });
+    });
+    $('#pdExport').on('click', function () {
+      SP.exportCsv('products.csv',
+        ['code', 'name', 'category', 'unit', 'qty', 'minQty', 'avgCost', 'value', 'salePrice', 'barcodes'],
+        list.map(function (p) {
+          return [p.code, p.name, SP.catName(p.categoryId), p.unit, p.qty, p.minQty, p.avgCost, p.value,
+            p.salePrice, (p.barcodes || []).map(function (b) { return b.barcode; }).join('|')];
+        }));
+    });
+    $('#pdImport').on('click', SP.importForm);
+  });
+};
+
+SP.productForm = function (p) {
+  p = p || {};
+  SP.ui.openForm({
+    title: p.id ? 'แก้ไขสินค้า' : 'เพิ่มสินค้า',
+    size: 'modal-lg',
+    body: SP.ui.row(
+      SP.ui.field('pfCode', 'รหัสสินค้า', p.code, { wrap: 'col-md-4', placeholder: 'เว้นว่าง = ออกให้อัตโนมัติ' }) +
+      SP.ui.field('pfName', 'ชื่อสินค้า', p.name, { wrap: 'col-md-8' })
+    ) + SP.ui.row(
+      SP.ui.select('pfCat', 'หมวดสินค้า', p.categoryId, SP.boot.categories || [], { wrap: 'col-md-4' }) +
+      SP.ui.field('pfUnit', 'หน่วยนับ', p.unit || 'ชิ้น', { wrap: 'col-md-4' }) +
+      (p.id ? '' : SP.ui.field('pfBc', 'บาร์โค้ด (ยิงได้เลย)', '', { wrap: 'col-md-4', cls: 'mono' }))
+    ) + SP.ui.row(
+      SP.ui.field('pfMin', 'สต๊อกขั้นต่ำ', p.minQty || 0, { wrap: 'col-md-3', type: 'number', step: 'any' }) +
+      SP.ui.field('pfMax', 'สต๊อกสูงสุด', p.maxQty || 0, { wrap: 'col-md-3', type: 'number', step: 'any' }) +
+      SP.ui.field('pfCost', 'ต้นทุนเฉลี่ย', p.avgCost || 0, { wrap: 'col-md-3', type: 'number', step: 'any', help: p.id ? 'ระบบคำนวณเองตอนรับเข้า' : 'ต้นทุนตั้งต้น' }) +
+      SP.ui.field('pfPrice', 'ราคาขาย', p.salePrice || 0, { wrap: 'col-md-3', type: 'number', step: 'any' })
+    ) + '\x3cdiv class="card-x" style="box-shadow:none">\x3cdiv class="card-x-body">' +
+      '\x3cdiv class="form-label mb-2">การติดตามสินค้า\x3c/div>' +
+      SP.ui.row(
+        '\x3cdiv class="col-md-4">' + SP.ui.check('pfLot', 'ติดตามล็อต / วันหมดอายุ (FEFO)', !!p.trackLot) + '\x3c/div>' +
+        '\x3cdiv class="col-md-4">' + SP.ui.check('pfSer', 'ติดตามซีเรียลรายชิ้น', !!p.trackSerial) + '\x3c/div>' +
+        SP.ui.field('pfShelf', 'อายุสินค้า (วัน)', p.shelfLifeDays || 0, {
+          wrap: 'col-md-4', type: 'number',
+          help: 'ใส่แล้วระบบคำนวณวันหมดอายุให้ตอนรับเข้า'
+        })
+      ) + '\x3c/div>\x3c/div>' +
+      SP.ui.field('pfNote', 'หมายเหตุ', p.note, { type: 'textarea' }) +
+      SP.ui.check('pfActive', 'เปิดใช้งาน', p.active !== false),
+    onShown: function () { $('#pfBc').length ? $('#pfBc').focus() : $('#pfName').focus(); },
+    onSave: function () {
+      var d = {
+        id: p.id, code: SP.ui.val('pfCode'), name: SP.ui.val('pfName'),
+        categoryId: SP.ui.val('pfCat'), unit: SP.ui.val('pfUnit'),
+        minQty: SP.ui.val('pfMin'), maxQty: SP.ui.val('pfMax'),
+        avgCost: SP.ui.val('pfCost'), salePrice: SP.ui.val('pfPrice'),
+        note: SP.ui.val('pfNote'), active: SP.ui.checked('pfActive'),
+        trackLot: SP.ui.checked('pfLot'), trackSerial: SP.ui.checked('pfSer'),
+        shelfLifeDays: SP.ui.val('pfShelf')
+      };
+      if ($('#pfBc').length) d.barcode = SP.ui.val('pfBc');
+      if (!d.name) { SP.toast('กรุณากรอกชื่อสินค้า', 'bad'); return; }
+      SP.busy(true);
+      SP.api('apiSaveProduct', d)
+        .then(function (r) {
+          SP.toast(r.message, 'ok'); SP.ui.closeForm();
+          return SP.scan.loadIndex();
+        })
+        .then(function () { SP.route(); })
+        .catch(function (e) { SP.toast(e.message, 'bad'); })
+        .then(function () { SP.busy(false); }, function () { SP.busy(false); });
+    }
+  });
+};
+
+/* จัดการบาร์โค้ดของสินค้าหนึ่งตัว (หลายหน่วยนับ) */
+SP.barcodeManage = function (p) {
+  function body(bcs) {
+    var h = '\x3cdiv class="t-sub mb-2">สินค้า: \x3cb>' + SP.esc(p.name) + '\x3c/b> · 1 สินค้ามีได้หลายบาร์โค้ด เช่น ชิ้น / แพ็ค / ลัง\x3c/div>';
+    h += '\x3ctable class="table-x mb-3">\x3cthead>\x3ctr>\x3cth>บาร์โค้ด\x3c/th>\x3cth>หน่วย\x3c/th>' +
+      '\x3cth class="text-num">จำนวนต่อหน่วย\x3c/th>\x3cth>\x3c/th>\x3c/tr>\x3c/thead>\x3ctbody>';
+    if (!bcs.length) h += '\x3ctr>\x3ctd colspan="4" class="text-center t-sub py-3">ยังไม่มีบาร์โค้ด\x3c/td>\x3c/tr>';
+    bcs.forEach(function (b) {
+      h += '\x3ctr>\x3ctd class="mono">' + SP.esc(b.barcode) + '\x3c/td>' +
+        '\x3ctd>' + SP.esc(b.unit) + '\x3c/td>' +
+        '\x3ctd class="text-num">' + SP.fmt(b.perUnit) + '\x3c/td>' +
+        '\x3ctd class="text-end">\x3cbutton class="btn btn-light btn-icon text-danger bmDel" data-id="' +
+        SP.esc(b.id) + '">\x3ci class="bi bi-trash">\x3c/i>\x3c/button>\x3c/td>\x3c/tr>';
+    });
+    h += '\x3c/tbody>\x3c/table>';
+    h += '\x3cdiv class="row g-2 align-items-end">' +
+      SP.ui.field('bmCode', 'บาร์โค้ดใหม่ (ยิงได้เลย)', '', { wrap: 'col-md-5', cls: 'mono' }) +
+      SP.ui.field('bmUnit', 'หน่วย', p.unit, { wrap: 'col-md-3' }) +
+      SP.ui.field('bmPer', 'จำนวนต่อหน่วย', 1, { wrap: 'col-md-2', type: 'number', step: 'any' }) +
+      '\x3cdiv class="col-md-2 mb-3">\x3cbutton class="btn btn-primary w-100" id="bmAdd">เพิ่ม\x3c/button>\x3c/div>' +
+      '\x3c/div>';
+    return h;
+  }
+  function reload() {
+    SP.api('apiListBarcodes').then(function (r) {
+      var bcs = (r.data || []).filter(function (b) { return b.productId === p.id; });
+      $('#spModalBody').html(body(bcs));
+      bind();
+    });
+  }
+  function bind() {
+    $('#bmCode').off('keydown').on('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); $('#bmAdd').click(); } });
+    $('#bmAdd').off('click').on('click', function () {
+      var code = SP.ui.val('bmCode');
+      if (!code) { SP.toast('กรุณากรอก/ยิงบาร์โค้ด', 'bad'); return; }
+      SP.busy(true);
+      SP.api('apiSaveBarcode', { barcode: code, productId: p.id, unit: SP.ui.val('bmUnit'), perUnit: SP.ui.val('bmPer') })
+        .then(function () { return SP.scan.loadIndex(); })
+        .then(function () { SP.toast('เพิ่มบาร์โค้ดแล้ว', 'ok'); reload(); })
+        .catch(function (e) { SP.toast(e.message, 'bad'); })
+        .then(function () { SP.busy(false); }, function () { SP.busy(false); });
+    });
+    $('#spModalBody').off('click', '.bmDel').on('click', '.bmDel', function () {
+      var id = $(this).data('id');
+      SP.busy(true);
+      SP.api('apiDeleteBarcode', id)
+        .then(function () { return SP.scan.loadIndex(); })
+        .then(function () { reload(); })
+        .catch(function (e) { SP.toast(e.message, 'bad'); })
+        .then(function () { SP.busy(false); }, function () { SP.busy(false); });
+    });
+    setTimeout(function () { $('#bmCode').focus(); }, 100);
+  }
+  SP.ui.openForm({ title: 'บาร์โค้ดของสินค้า', size: 'modal-lg', hideSave: true, body: 'กำลังโหลด...', onShown: reload });
+};
+
+/* นำเข้า CSV */
+SP.importForm = function () {
+  SP.ui.openForm({
+    title: 'นำเข้าสินค้าจาก CSV',
+    size: 'modal-lg',
+    body: '\x3cdiv class="t-sub mb-2">รูปแบบคอลัมน์ (บรรทัดแรกเป็นหัวตาราง):\x3cbr>' +
+      '\x3ccode>code,name,barcode,unit,minQty,salePrice,avgCost\x3c/code>\x3c/div>' +
+      '\x3cinput type="file" id="imFile" class="form-control mb-3" accept=".csv,text/csv">' +
+      '\x3cdiv id="imPreview">\x3c/div>',
+    saveText: 'นำเข้า',
+    onSave: function () {
+      if (!SP._importRows || !SP._importRows.length) { SP.toast('ยังไม่ได้เลือกไฟล์', 'bad'); return; }
+      SP.busy(true);
+      SP.api('apiImportProducts', SP._importRows)
+        .then(function (r) { SP.toast(r.message, 'ok'); SP.ui.closeForm(); return SP.scan.loadIndex(); })
+        .then(function () { SP.route(); })
+        .catch(function (e) { SP.toast(e.message, 'bad'); })
+        .then(function () { SP.busy(false); }, function () { SP.busy(false); });
+    },
+    onShown: function () {
+      $('#imFile').on('change', function (e) {
+        var f = e.target.files[0]; if (!f) return;
+        var rd = new FileReader();
+        rd.onload = function (ev) {
+          var txt = String(ev.target.result).replace(/^\ufeff/, '');
+          var lines = txt.split(/\r?\n/).filter(function (l) { return l.trim(); });
+          if (lines.length < 2) { SP.toast('ไฟล์ว่าง', 'bad'); return; }
+          var head = lines[0].split(',').map(function (s) { return s.trim(); });
+          var rows = [];
+          for (var i = 1; i < lines.length; i++) {
+            var c = lines[i].split(',');
+            var o = {};
+            head.forEach(function (h, j) { o[h] = (c[j] || '').trim(); });
+            rows.push(o);
+          }
+          SP._importRows = rows;
+          $('#imPreview').html('\x3cdiv class="badge-x b-in">อ่านได้ ' + rows.length + ' แถว\x3c/div>' +
+            '\x3cdiv class="t-sub mt-2">ตัวอย่างแถวแรก: ' + SP.esc(JSON.stringify(rows[0])) + '\x3c/div>');
+        };
+        rd.readAsText(f, 'UTF-8');
+      });
+    }
+  });
+};
+
+/* ============================================================
+   หน้า: บาร์โค้ดทั้งหมด
+   ============================================================ */
+SP.pages.barcodes = function () {
+  return Promise.all([SP.api('apiListBarcodes'), SP.api('apiListProducts')]).then(function (rs) {
+    var bcs = rs[0].data || [], prods = rs[1].data || [];
+    var pm = {}; prods.forEach(function (p) { pm[p.id] = p; });
+
+    SP.render(
+      '\x3cdiv class="filter-row mb-3">\x3cdiv class="fi flex-grow-1">' +
+      '\x3clabel class="form-label">ค้นหา / ยิงบาร์โค้ดเพื่อหา\x3c/label>' +
+      '\x3cinput id="bcQ" class="form-control mono" placeholder="บาร์โค้ด หรือ ชื่อสินค้า">\x3c/div>\x3c/div>' +
+      SP.card('ทะเบียนบาร์โค้ด (' + bcs.length + ' รหัส)', '\x3cdiv id="bcTable">\x3c/div>',
+        '\x3cbutton class="btn btn-sm btn-primary" id="bcAdd">\x3ci class="bi bi-plus-lg">\x3c/i> ผูกบาร์โค้ดใหม่\x3c/button>', true)
+    );
+
+    function draw() {
+      var q = String($('#bcQ').val() || '').toLowerCase();
+      var rows = bcs.filter(function (b) {
+        if (!q) return true;
+        var p = pm[b.productId];
+        return (b.barcode + ' ' + (p ? p.name + ' ' + p.code : '')).toLowerCase().indexOf(q) > -1;
+      });
+      if (!rows.length) { $('#bcTable').html(SP.empty('ไม่พบบาร์โค้ด', 'upc')); return; }
+      var h = '\x3cdiv class="table-wrap">\x3ctable class="table-x">\x3cthead>\x3ctr>' +
+        '\x3cth>บาร์โค้ด\x3c/th>\x3cth>สินค้า\x3c/th>\x3cth>หน่วย\x3c/th>' +
+        '\x3cth class="text-num">ต่อหน่วย\x3c/th>\x3cth class="text-num">คงเหลือ\x3c/th>\x3cth>\x3c/th>\x3c/tr>\x3c/thead>\x3ctbody>';
+      rows.slice(0, 800).forEach(function (b) {
+        var p = pm[b.productId];
+        h += '\x3ctr>\x3ctd class="mono">' + SP.esc(b.barcode) + '\x3c/td>' +
+          '\x3ctd>\x3cdiv class="t-main">' + SP.esc(p ? p.name : 'ไม่พบสินค้า') + '\x3c/div>' +
+          '\x3cdiv class="t-sub mono">' + SP.esc(p ? p.code : '') + '\x3c/div>\x3c/td>' +
+          '\x3ctd>' + SP.esc(b.unit) + '\x3c/td>' +
+          '\x3ctd class="text-num">' + SP.fmt(b.perUnit) + '\x3c/td>' +
+          '\x3ctd class="text-num">' + (p ? SP.fmt(p.qty) : '-') + '\x3c/td>' +
+          '\x3ctd class="text-end">\x3cbutton class="btn btn-light btn-icon text-danger bcDel" data-id="' +
+          SP.esc(b.id) + '">\x3ci class="bi bi-trash">\x3c/i>\x3c/button>\x3c/td>\x3c/tr>';
+      });
+      h += '\x3c/tbody>\x3c/table>\x3c/div>';
+      $('#bcTable').html(h);
+    }
+    draw();
+    $('#bcQ').on('input', draw);
+
+    $('#bcAdd').on('click', function () {
+      SP.ui.openForm({
+        title: 'ผูกบาร์โค้ดกับสินค้า',
+        body: SP.ui.field('nbCode', 'บาร์โค้ด (ยิงได้เลย)', '', { cls: 'mono' }) +
+          '\x3cdiv class="mb-3">\x3clabel class="form-label">สินค้า\x3c/label>\x3cdiv id="nbPick">\x3c/div>\x3c/div>' +
+          SP.ui.row(
+            SP.ui.field('nbUnit', 'หน่วย', 'ชิ้น', { wrap: 'col-6' }) +
+            SP.ui.field('nbPer', 'จำนวนต่อหน่วย', 1, { wrap: 'col-6', type: 'number', step: 'any' })
+          ),
+        onShown: function () {
+          SP._nbPick = SP.ui.picker('nbPick', {
+            items: prods.map(function (p) { return { id: p.id, name: p.name, sub: p.code + ' · คงเหลือ ' + SP.fmt(p.qty) + ' ' + p.unit }; }),
+            onPick: function (i) {
+              var p = pm[i.id]; if (p) $('#nbUnit').val(p.unit);
+            }
+          });
+          $('#nbCode').focus();
+        },
+        onSave: function () {
+          var pick = SP._nbPick.get();
+          if (!pick) { SP.toast('กรุณาเลือกสินค้า', 'bad'); return; }
+          SP.busy(true);
+          SP.api('apiSaveBarcode', {
+            barcode: SP.ui.val('nbCode'), productId: pick.id,
+            unit: SP.ui.val('nbUnit'), perUnit: SP.ui.val('nbPer')
+          })
+            .then(function (r) { SP.toast(r.message, 'ok'); SP.ui.closeForm(); return SP.scan.loadIndex(); })
+            .then(function () { SP.route(); })
+            .catch(function (e) { SP.toast(e.message, 'bad'); })
+            .then(function () { SP.busy(false); }, function () { SP.busy(false); });
+        }
+      });
+    });
+
+    $('#content').on('click', '.bcDel', function () {
+      var id = $(this).data('id');
+      SP.ui.confirm('ลบบาร์โค้ดนี้?', function () {
+        SP.busy(true);
+        SP.api('apiDeleteBarcode', id)
+          .then(function () { return SP.scan.loadIndex(); })
+          .then(function () { SP.toast('ลบแล้ว', 'ok'); SP.route(); })
+          .catch(function (e) { SP.toast(e.message, 'bad'); })
+          .then(function () { SP.busy(false); }, function () { SP.busy(false); });
+      });
+    });
+  });
+};
+
+/* ============================================================
+   หน้า: พิมพ์สติกเกอร์บาร์โค้ด
+   ============================================================ */
+SP.pages.labels = function () {
+  return SP.api('apiListProducts').then(function (r) {
+    var prods = r.data || [];
+    var s = SP.boot.settings || {};
+    SP.render(
+      SP.card('เลือกสินค้าที่จะพิมพ์',
+        '\x3cdiv class="row g-2 align-items-end">' +
+        '\x3cdiv class="col-md-5 mb-3">\x3clabel class="form-label">สินค้า\x3c/label>\x3cdiv id="lbPick">\x3c/div>\x3c/div>' +
+        SP.ui.field('lbQty', 'จำนวนดวง', 12, { wrap: 'col-md-2', type: 'number' }) +
+        SP.ui.field('lbW', 'กว้าง (มม.)', s.labelWidth || 50, { wrap: 'col-md-2', type: 'number' }) +
+        SP.ui.field('lbH', 'สูง (มม.)', s.labelHeight || 25, { wrap: 'col-md-2', type: 'number' }) +
+        '\x3cdiv class="col-md-1 mb-3">\x3cbutton class="btn btn-primary w-100" id="lbGen">สร้าง\x3c/button>\x3c/div>' +
+        '\x3c/div>' +
+        '\x3cdiv class="t-sub">สินค้าที่ยังไม่มีบาร์โค้ด ระบบจะใช้ "รหัสสินค้า" เป็นบาร์โค้ดให้อัตโนมัติ (CODE128) พิมพ์แล้วยิงได้ทันที\x3c/div>'
+      ) +
+      SP.card('ตัวอย่างก่อนพิมพ์', '\x3cdiv id="lbSheet" class="label-sheet">\x3c/div>',
+        '\x3cbutton class="btn btn-sm btn-light no-print" id="lbPrint">\x3ci class="bi bi-printer">\x3c/i> พิมพ์\x3c/button>')
+    );
+
+    var pick = SP.ui.picker('lbPick', {
+      items: prods.map(function (p) {
+        var bc = (p.barcodes || [])[0];
+        return { id: p.id, name: p.name, sub: (bc ? 'บาร์โค้ด ' + bc.barcode : 'ใช้รหัส ' + p.code) };
+      })
+    });
+
+    $('#lbGen').on('click', function () {
+      var sel = pick.get();
+      if (!sel) { SP.toast('กรุณาเลือกสินค้า', 'bad'); return; }
+      var p = prods.filter(function (x) { return x.id === sel.id; })[0];
+      var bc = (p.barcodes || [])[0];
+      var code = bc ? bc.barcode : p.code;
+      var n = Math.max(1, parseInt($('#lbQty').val(), 10) || 1);
+      var w = SP.n($('#lbW').val()) || 50, hh = SP.n($('#lbH').val()) || 25;
+      var html = '';
+      for (var i = 0; i < n; i++) {
+        var id = 'bcimg_' + i;
+        html += '\x3cdiv class="label-item" style="width:' + w + 'mm;height:' + hh + 'mm">' +
+          '\x3cdiv class="lb-name" style="width:' + (w - 6) + 'mm">' + SP.esc(p.name) + '\x3c/div>' +
+          '\x3csvg id="' + id + '">\x3c/svg>\x3c/div>';
+      }
+      $('#lbSheet').html(html);
+      for (var j = 0; j < n; j++) {
+        try {
+          JsBarcode('#bcimg_' + j, String(code), {
+            format: 'CODE128', width: 1.4, height: (hh - 12) * 3.2,
+            fontSize: 11, margin: 0, displayValue: true
+          });
+        } catch (e) { SP.toast('สร้างบาร์โค้ดไม่สำเร็จ: ' + e.message, 'bad'); break; }
+      }
+    });
+    $('#lbPrint').on('click', function () { window.print(); });
+  });
+};
+
+/* ============================================================
+   หน้าข้อมูลหลักแบบตารางง่าย: หมวด / คลัง / ผู้จำหน่าย
+   ============================================================ */
+SP.simpleMaster = function (cfg) {
+  return SP.api(cfg.listFn).then(function (r) {
+    var list = r.data || [];
+    SP.render(SP.card(cfg.title + ' (' + list.length + ')', '\x3cdiv id="smTable">\x3c/div>',
+      '\x3cbutton class="btn btn-sm btn-primary" id="smAdd">\x3ci class="bi bi-plus-lg">\x3c/i> เพิ่ม\x3c/button>', true));
+
+    var h = '\x3cdiv class="table-wrap">\x3ctable class="table-x">\x3cthead>\x3ctr>' +
+      cfg.cols.map(function (c) { return '\x3cth>' + SP.esc(c.label) + '\x3c/th>'; }).join('') +
+      '\x3cth>สถานะ\x3c/th>\x3cth>\x3c/th>\x3c/tr>\x3c/thead>\x3ctbody>';
+    if (!list.length) {
+      h += '\x3ctr>\x3ctd colspan="' + (cfg.cols.length + 2) + '">' + SP.empty('ยังไม่มีข้อมูล') + '\x3c/td>\x3c/tr>';
+    }
+    list.forEach(function (it) {
+      h += '\x3ctr>' + cfg.cols.map(function (c) {
+        return '\x3ctd' + (c.mono ? ' class="mono"' : '') + '>' + SP.esc(it[c.key] || '-') + '\x3c/td>';
+      }).join('') +
+        '\x3ctd>' + (it.active === false ? '\x3cspan class="badge-x b-muted">ปิด\x3c/span>' : '\x3cspan class="badge-x b-in">ใช้งาน\x3c/span>') + '\x3c/td>' +
+        '\x3ctd class="text-end" style="white-space:nowrap">' +
+        '\x3cbutton class="btn btn-light btn-icon smEdit" data-id="' + SP.esc(it.id) + '">\x3ci class="bi bi-pencil">\x3c/i>\x3c/button> ' +
+        '\x3cbutton class="btn btn-light btn-icon text-danger smDel" data-id="' + SP.esc(it.id) + '">\x3ci class="bi bi-trash">\x3c/i>\x3c/button>' +
+        '\x3c/td>\x3c/tr>';
+    });
+    h += '\x3c/tbody>\x3c/table>\x3c/div>';
+    $('#smTable').html(h);
+
+    function form(it) {
+      it = it || {};
+      SP.ui.openForm({
+        title: (it.id ? 'แก้ไข' : 'เพิ่ม') + cfg.title,
+        body: cfg.fields.map(function (f) {
+          return SP.ui.field('sm_' + f.key, f.label, it[f.key], { type: f.type || 'text' });
+        }).join('') + SP.ui.check('sm_active', 'เปิดใช้งาน', it.active !== false),
+        onSave: function () {
+          var d = { id: it.id };
+          cfg.fields.forEach(function (f) { d[f.key] = SP.ui.val('sm_' + f.key); });
+          d.active = SP.ui.checked('sm_active');
+          SP.busy(true);
+          SP.api(cfg.saveFn, d)
+            .then(function (rr) { SP.toast(rr.message, 'ok'); SP.ui.closeForm(); return SP.api('apiBootstrap'); })
+            .then(function (bb) { SP.boot = bb.data; SP.route(); })
+            .catch(function (e) { SP.toast(e.message, 'bad'); })
+            .then(function () { SP.busy(false); }, function () { SP.busy(false); });
+        }
+      });
+    }
+    $('#smAdd').on('click', function () { form(null); });
+    $('#content').on('click', '.smEdit', function () {
+      form(list.filter(function (x) { return x.id === $(this).data('id'); }.bind(this))[0]);
+    });
+    $('#content').on('click', '.smDel', function () {
+      var id = $(this).data('id');
+      SP.ui.confirm('ยืนยันการลบ?', function () {
+        SP.busy(true);
+        SP.api(cfg.delFn, id)
+          .then(function (rr) { SP.toast(rr.message, 'ok'); return SP.api('apiBootstrap'); })
+          .then(function (bb) { SP.boot = bb.data; SP.route(); })
+          .catch(function (e) { SP.toast(e.message, 'bad'); })
+          .then(function () { SP.busy(false); }, function () { SP.busy(false); });
+      });
+    });
+  });
+};
+
+SP.pages.categories = function () {
+  return SP.simpleMaster({
+    title: 'หมวดสินค้า', listFn: 'apiListCategories', saveFn: 'apiSaveCategory', delFn: 'apiDeleteCategory',
+    cols: [{ key: 'code', label: 'รหัส', mono: true }, { key: 'name', label: 'ชื่อหมวด' }],
+    fields: [{ key: 'code', label: 'รหัส' }, { key: 'name', label: 'ชื่อหมวด' }]
+  });
+};
+
+SP.pages.locations = function () {
+  return SP.simpleMaster({
+    title: 'คลัง/จุดเก็บ', listFn: 'apiListLocations', saveFn: 'apiSaveLocation', delFn: 'apiDeleteLocation',
+    cols: [{ key: 'code', label: 'รหัส', mono: true }, { key: 'name', label: 'ชื่อคลัง' }, { key: 'address', label: 'ที่ตั้ง' }],
+    fields: [{ key: 'code', label: 'รหัสคลัง' }, { key: 'name', label: 'ชื่อคลัง' }, { key: 'address', label: 'ที่ตั้ง', type: 'textarea' }]
+  });
+};
+
+SP.pages.suppliers = function () {
+  return SP.simpleMaster({
+    title: 'ผู้จำหน่าย', listFn: 'apiListSuppliers', saveFn: 'apiSaveSupplier', delFn: 'apiDeleteSupplier',
+    cols: [{ key: 'code', label: 'รหัส', mono: true }, { key: 'name', label: 'ชื่อผู้จำหน่าย' },
+    { key: 'contact', label: 'ผู้ติดต่อ' }, { key: 'phone', label: 'โทร' }],
+    fields: [{ key: 'code', label: 'รหัส' }, { key: 'name', label: 'ชื่อผู้จำหน่าย' },
+    { key: 'contact', label: 'ผู้ติดต่อ' }, { key: 'phone', label: 'โทรศัพท์' },
+    { key: 'taxId', label: 'เลขผู้เสียภาษี' }, { key: 'address', label: 'ที่อยู่', type: 'textarea' }]
+  });
+};
+</script>

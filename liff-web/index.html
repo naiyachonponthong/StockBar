@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>StockBar Mobile</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink: oklch(0.26 0.022 250);
+  --ink-soft: oklch(0.46 0.020 250);
+  --ink-faint: oklch(0.62 0.016 250);
+  --paper: oklch(0.985 0.004 250);
+  --surface: oklch(1 0 0);
+  --surface-2: oklch(0.966 0.006 250);
+  --line: oklch(0.905 0.008 250);
+  --brand: oklch(0.46 0.095 248);
+  --brand-deep: oklch(0.36 0.085 250);
+  --brand-tint: oklch(0.945 0.022 248);
+  --amber: oklch(0.74 0.145 68);
+  --amber-tint: oklch(0.958 0.036 76);
+  --green: oklch(0.60 0.115 155);
+  --green-tint: oklch(0.950 0.035 155);
+  --red: oklch(0.56 0.165 27);
+  --red-tint: oklch(0.952 0.032 27);
+  --nav-h: 62px;
+}
+*{ -webkit-tap-highlight-color: transparent; }
+body{
+  font-family:'IBM Plex Sans Thai', system-ui, sans-serif;
+  background:var(--paper); color:var(--ink); margin:0; font-size:15px;
+  padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom));
+}
+.mono{ font-family:'IBM Plex Mono',monospace; font-variant-numeric:tabular-nums; }
+
+.appbar{
+  position:sticky; top:0; z-index:50; background:var(--brand-deep); color:#fff;
+  padding:12px 16px; display:flex; align-items:center; gap:10px;
+  padding-top: calc(12px + env(safe-area-inset-top));
+}
+.appbar .ttl{ font-weight:600; font-size:16px; }
+.appbar .who{ margin-left:auto; font-size:12px; opacity:.85; text-align:right; line-height:1.3; }
+.wrap{ padding:14px; }
+
+.card-m{
+  background:var(--surface); border:1px solid var(--line); border-radius:12px;
+  padding:14px; margin-bottom:12px;
+  box-shadow:0 1px 2px oklch(0.26 0.022 250/.05);
+}
+.card-m .hd{ font-size:13px; font-weight:600; color:var(--ink-soft); margin-bottom:9px; }
+
+.tiles{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.tile{
+  background:var(--surface); border:1px solid var(--line); border-radius:12px;
+  padding:16px 14px; text-align:left; color:var(--ink);
+}
+.tile i{ font-size:22px; color:var(--brand); display:block; margin-bottom:8px; }
+.tile .tn{ font-weight:600; font-size:14.5px; }
+.tile .ts{ font-size:11.5px; color:var(--ink-faint); margin-top:2px; }
+.tile:active{ background:var(--brand-tint); }
+.tile.lead{ background:var(--brand-deep); border-color:transparent; color:#fff; }
+.tile.lead i, .tile.lead .ts{ color:oklch(0.85 0.03 248); }
+
+.kpi{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:12px; }
+.kpi .k{
+  background:var(--surface); border:1px solid var(--line); border-radius:11px;
+  padding:11px 10px; text-align:center;
+}
+.kpi .kv{ font-family:'IBM Plex Mono',monospace; font-size:18px; font-weight:700; }
+.kpi .kl{ font-size:10.5px; color:var(--ink-faint); margin-top:2px; line-height:1.25; }
+.kpi .k.warn{ background:var(--amber-tint); border-color:transparent; }
+.kpi .k.bad{ background:var(--red-tint); border-color:transparent; }
+
+.scanbar{ background:var(--brand-deep); border-radius:12px; padding:13px; margin-bottom:12px; }
+.scanbar .lb{ font-size:11.5px; color:oklch(0.84 0.025 248); margin-bottom:7px; }
+.scan-in{
+  font-family:'IBM Plex Mono',monospace; font-size:17px; padding:10px 12px;
+  border:2px solid transparent; border-radius:9px; width:100%;
+}
+.scan-in:focus{ outline:none; border-color:var(--amber); }
+.btn-scan{
+  width:100%; margin-top:9px; background:var(--amber); border:none; color:oklch(0.25 0.06 60);
+  font-weight:600; padding:11px; border-radius:9px; font-size:15px;
+}
+.btn-scan:active{ filter:brightness(.94); }
+
+.row-i{
+  display:flex; gap:10px; align-items:center; padding:10px 0;
+  border-bottom:1px solid oklch(0.945 0.006 250);
+}
+.row-i:last-child{ border-bottom:none; }
+.row-i .nm{ font-weight:600; font-size:14px; line-height:1.25; }
+.row-i .sb{ font-size:11.5px; color:var(--ink-faint); }
+.row-i .qt{ margin-left:auto; text-align:right; font-family:'IBM Plex Mono',monospace; font-weight:600; }
+.qin{ width:74px; text-align:right; font-family:'IBM Plex Mono',monospace; }
+
+.bdg{ display:inline-block; padding:2px 8px; border-radius:20px; font-size:11px; font-weight:600; }
+.b-in{ background:var(--green-tint); color:oklch(0.42 0.10 155); }
+.b-out{ background:var(--red-tint); color:oklch(0.44 0.13 27); }
+.b-tr{ background:var(--brand-tint); color:var(--brand-deep); }
+.b-ct{ background:var(--amber-tint); color:oklch(0.46 0.11 62); }
+.b-mu{ background:var(--surface-2); color:var(--ink-faint); }
+
+.nav{
+  position:fixed; left:0; right:0; bottom:0; z-index:60; height:var(--nav-h);
+  background:var(--surface); border-top:1px solid var(--line);
+  display:grid; grid-template-columns:repeat(4,1fr);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.nav a{
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:3px; color:var(--ink-faint); font-size:11px; text-decoration:none;
+}
+.nav a i{ font-size:19px; }
+.nav a.on{ color:var(--brand); font-weight:600; }
+
+.sheet-btn{
+  position:fixed; right:16px; bottom:calc(var(--nav-h) + 16px + env(safe-area-inset-bottom));
+  z-index:55; width:54px; height:54px; border-radius:50%; border:none;
+  background:var(--brand); color:#fff; font-size:23px;
+  box-shadow:0 5px 18px oklch(0.36 0.085 250/.35);
+}
+.empty{ text-align:center; padding:34px 14px; color:var(--ink-faint); font-size:13.5px; }
+.empty i{ font-size:30px; opacity:.5; display:block; margin-bottom:9px; }
+.toastm{
+  position:fixed; left:14px; right:14px; bottom:calc(var(--nav-h) + 14px);
+  z-index:200; display:grid; gap:7px;
+}
+.toastm .t{
+  background:var(--ink); color:#fff; padding:11px 14px; border-radius:10px; font-size:13.5px;
+}
+.toastm .t.ok{ background:oklch(0.40 0.10 155); }
+.toastm .t.bad{ background:oklch(0.44 0.15 27); }
+.load{
+  position:fixed; inset:0; z-index:300; display:none;
+  background:oklch(0.26 0.02 250/.35); place-items:center;
+}
+.load.on{ display:grid; }
+.form-control,.form-select{ border-color:var(--line); border-radius:9px; }
+.form-control:focus,.form-select:focus{ border-color:var(--brand); box-shadow:0 0 0 3px oklch(0.46 0.095 248/.13); }
+.btn-primary{ background:var(--brand); border-color:var(--brand); border-radius:9px; }
+label.form-label{ font-size:12.5px; font-weight:600; color:var(--ink-soft); margin-bottom:3px; }
+</style>
+</head>
+<body>
+
+<div class="appbar">
+  <i class="bi bi-upc-scan" style="font-size:19px"></i>
+  <div class="ttl" id="appTitle">StockBar</div>
+  <div class="who" id="who"></div>
+</div>
+
+<div id="view" class="wrap"></div>
+
+<button class="sheet-btn" id="fabScan" style="display:none"><i class="bi bi-upc-scan"></i></button>
+
+<div class="nav" id="nav" style="display:none">
+  <a href="#home" data-p="home"><i class="bi bi-house"></i>หน้าแรก</a>
+  <a href="#check" data-p="check"><i class="bi bi-search"></i>เช็คของ</a>
+  <a href="#move" data-p="move"><i class="bi bi-arrow-down-up"></i>รับ-จ่าย</a>
+  <a href="#me" data-p="me"><i class="bi bi-person"></i>บัญชี</a>
+</div>
+
+<div class="toastm" id="toasts"></div>
+<div class="load" id="load"><div class="spinner-border text-light"></div></div>
+
+<div id="camBox" style="display:none;position:fixed;inset:0;z-index:400;background:#000">
+  <div id="camView" style="width:100%;height:100%"></div>
+  <button id="camClose" style="position:absolute;top:calc(14px + env(safe-area-inset-top));right:14px;z-index:401;border:none;background:rgba(0,0,0,.6);color:#fff;border-radius:50%;width:42px;height:42px;font-size:20px">&times;</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

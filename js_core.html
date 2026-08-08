@@ -1,0 +1,533 @@
+<script>
+/* ============================================================
+   SP — namespace กลางของทั้งแอป
+   ============================================================ */
+var SP = {
+  token: null,
+  user: null,
+  boot: {},          // settings / categories / locations / suppliers
+  scanIndex: {},     // barcode -> product
+  balances: {},      // "productId|locationId" -> qty
+  lots: [],          // ล็อตคงเหลือทั้งหมด (ใช้ดูตัวอย่าง FEFO ฝั่งเว็บ)
+  pages: {},         // registry ของทุกหน้า
+  current: ''
+};
+
+/* ---------- error visibility ---------- */
+window.onerror = function (msg, url, line) {
+  SP.toast('ข้อผิดพลาดหน้าเว็บ: ' + msg + ' (บรรทัด ' + line + ')', 'bad');
+  return false;
+};
+window.addEventListener('unhandledrejection', function (e) {
+  SP.toast('ข้อผิดพลาด: ' + (e.reason && e.reason.message ? e.reason.message : e.reason), 'bad');
+});
+
+/* ---------- server call wrapper ---------- */
+SP.srun = function (fnName) {
+  var args = Array.prototype.slice.call(arguments, 1);
+  return new Promise(function (resolve, reject) {
+    if (!google || !google.script || !google.script.run) {
+      reject(new Error('ไม่พบ google.script.run')); return;
+    }
+    var runner = google.script.run
+      .withSuccessHandler(function (res) {
+        if (res && res.status === 'error') {
+          if (String(res.message).indexOf('เซสชัน') === 0) { SP.forceLogout(res.message); }
+          reject(new Error(res.message));
+        } else { resolve(res); }
+      })
+      .withFailureHandler(function (e) { reject(new Error(e && e.message ? e.message : String(e))); });
+    if (typeof runner[fnName] !== 'function') { reject(new Error('ไม่พบฟังก์ชัน ' + fnName)); return; }
+    runner[fnName].apply(runner, args);
+  });
+};
+/* เรียกแบบส่ง token อัตโนมัติ */
+SP.api = function (fnName) {
+  var args = Array.prototype.slice.call(arguments, 1);
+  return SP.srun.apply(SP, [fnName, SP.token].concat(args));
+};
+
+/* ---------- utils ---------- */
+SP.esc = function (s) {
+  if (s === null || s === undefined) return '';
+  return String(s).replace(/&/g, '&amp;').replace(/[<]/g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+};
+SP.n = function (v) { var x = parseFloat(v); return isNaN(x) ? 0 : x; };
+SP.fmt = function (v, dec) {
+  var d = dec === undefined ? 0 : dec;
+  return SP.n(v).toLocaleString('th-TH', { minimumFractionDigits: d, maximumFractionDigits: d });
+};
+SP.money = function (v) { return SP.fmt(v, 2); };
+SP.today = function () {
+  var d = new Date();
+  return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+};
+SP.dt = function (iso) {
+  if (!iso) return '-';
+  var d = new Date(iso);
+  if (isNaN(d.getTime())) return String(iso).slice(0, 10);
+  return ('0' + d.getDate()).slice(-2) + '/' + ('0' + (d.getMonth() + 1)).slice(-2) + '/' +
+    (d.getFullYear() + 543).toString().slice(-2) + ' ' +
+    ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+};
+SP.dOnly = function (iso) {
+  if (!iso) return '-';
+  var d = new Date(iso);
+  if (isNaN(d.getTime())) return String(iso).slice(0, 10);
+  return ('0' + d.getDate()).slice(-2) + '/' + ('0' + (d.getMonth() + 1)).slice(-2) + '/' + (d.getFullYear() + 543);
+};
+SP.uid = function () { return 'x' + Math.random().toString(36).slice(2, 9); };
+
+SP.toast = function (msg, kind) {
+  var el = $('\x3cdiv class="toast-x ' + (kind || '') + '">' + SP.esc(msg) + '\x3c/div>');
+  $('#toastStack').append(el);
+  setTimeout(function () { el.fadeOut(220, function () { el.remove(); }); }, kind === 'bad' ? 5200 : 2800);
+};
+SP.busy = function (on) { $('#busyOverlay').toggleClass('show', !!on); };
+
+SP.beep = function (kind) {
+  try {
+    var ctx = SP._actx || (SP._actx = new (window.AudioContext || window.webkitAudioContext)());
+    var o = ctx.createOscillator(), g = ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    var f = kind === 'bad' ? 220 : (kind === 'dup' ? 520 : 880);
+    o.frequency.value = f; o.type = 'square';
+    g.gain.setValueAtTime(0.06, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.14);
+    o.start(); o.stop(ctx.currentTime + 0.15);
+  } catch (e) { }
+};
+
+/* ---------- master data helpers ---------- */
+SP.locName = function (id) {
+  var l = (SP.boot.locations || []).filter(function (x) { return x.id === id; })[0];
+  return l ? l.name : '-';
+};
+SP.catName = function (id) {
+  var c = (SP.boot.categories || []).filter(function (x) { return x.id === id; })[0];
+  return c ? c.name : '-';
+};
+SP.supName = function (id) {
+  var s = (SP.boot.suppliers || []).filter(function (x) { return x.id === id; })[0];
+  return s ? s.name : '-';
+};
+SP.can = function (roles) {
+  if (!roles) return true;
+  return roles.split(',').indexOf(SP.user.role) > -1;
+};
+
+/* ============================================================
+   SP.ui — โมดัล/ฟอร์มกลาง ใช้ซ้ำทุกหน้า
+   ============================================================ */
+SP.ui = {};
+SP._modal = null;
+SP._confirm = null;
+
+SP.ui.openForm = function (opt) {
+  $('#spModalTitle').text(opt.title || 'แบบฟอร์ม');
+  $('#spModalBody').html(opt.body || '');
+  $('#spModalDialog').attr('class', 'modal-dialog modal-dialog-centered ' + (opt.size || ''));
+  $('#spModalSave').text(opt.saveText || 'บันทึก').toggle(opt.hideSave !== true);
+  $('#spModalSave').off('click').on('click', function () {
+    if (opt.onSave) opt.onSave();
+  });
+  if (!SP._modal) SP._modal = new bootstrap.Modal(document.getElementById('spModal'));
+  SP._modal.show();
+  if (opt.onShown) setTimeout(opt.onShown, 260);
+};
+SP.ui.closeForm = function () { if (SP._modal) SP._modal.hide(); };
+
+SP.ui.confirm = function (text, cb) {
+  $('#spConfirmText').text(text);
+  $('#spConfirmOk').off('click').on('click', function () {
+    SP._confirm.hide(); cb();
+  });
+  if (!SP._confirm) SP._confirm = new bootstrap.Modal(document.getElementById('spConfirm'));
+  SP._confirm.show();
+};
+
+/* field builders */
+SP.ui.field = function (id, label, value, opt) {
+  opt = opt || {};
+  var type = opt.type || 'text';
+  var attr = 'id="' + id + '" class="form-control ' + (opt.cls || '') + '" type="' + type + '"';
+  if (opt.step) attr += ' step="' + opt.step + '"';
+  if (opt.placeholder) attr += ' placeholder="' + SP.esc(opt.placeholder) + '"';
+  if (opt.readonly) attr += ' readonly';
+  var input = type === 'textarea'
+    ? '\x3ctextarea id="' + id + '" class="form-control" rows="' + (opt.rows || 2) + '">' + SP.esc(value || '') + '\x3c/textarea>'
+    : '\x3cinput ' + attr + ' value="' + SP.esc(value === undefined || value === null ? '' : value) + '">';
+  return '\x3cdiv class="mb-3 ' + (opt.wrap || '') + '">' +
+    (label ? '\x3clabel class="form-label">' + SP.esc(label) + '\x3c/label>' : '') +
+    input +
+    (opt.help ? '\x3cdiv class="t-sub mt-1">' + SP.esc(opt.help) + '\x3c/div>' : '') +
+    '\x3c/div>';
+};
+
+SP.ui.select = function (id, label, value, items, opt) {
+  opt = opt || {};
+  var h = '\x3cdiv class="mb-3 ' + (opt.wrap || '') + '">';
+  if (label) h += '\x3clabel class="form-label">' + SP.esc(label) + '\x3c/label>';
+  h += '\x3cselect id="' + id + '" class="form-select">';
+  if (opt.blank !== false) h += '\x3coption value="">' + SP.esc(opt.blankText || '-- เลือก --') + '\x3c/option>';
+  items.forEach(function (it) {
+    var v = it.id !== undefined ? it.id : it.value;
+    var t = it.name !== undefined ? it.name : it.text;
+    h += '\x3coption value="' + SP.esc(v) + '"' + (String(v) === String(value) ? ' selected' : '') + '>' + SP.esc(t) + '\x3c/option>';
+  });
+  h += '\x3c/select>\x3c/div>';
+  return h;
+};
+
+SP.ui.check = function (id, label, checked) {
+  return '\x3cdiv class="form-check mb-3">' +
+    '\x3cinput class="form-check-input" type="checkbox" id="' + id + '"' + (checked ? ' checked' : '') + '>' +
+    '\x3clabel class="form-check-label" for="' + id + '">' + SP.esc(label) + '\x3c/label>\x3c/div>';
+};
+
+SP.ui.val = function (id) { return $('#' + id).val(); };
+SP.ui.checked = function (id) { return $('#' + id).is(':checked'); };
+SP.ui.row = function (inner) { return '\x3cdiv class="row g-2">' + inner + '\x3c/div>'; };
+
+/**
+ * dropdown ค้นหาได้ + โชว์รายการทันทีที่คลิก (ผู้ใช้จะได้รู้ว่าค้นหาได้)
+ * opt: {items:[{id,name,sub}], value, placeholder, onPick(item)}
+ */
+SP.ui.picker = function (containerId, opt) {
+  var items = opt.items || [];
+  var sel = null;
+  if (opt.value) sel = items.filter(function (i) { return i.id === opt.value; })[0] || null;
+  var inputId = containerId + '_q', listId = containerId + '_l';
+  var h = '\x3cdiv class="position-relative">' +
+    '\x3cinput id="' + inputId + '" class="form-control" autocomplete="off" placeholder="' +
+    SP.esc(opt.placeholder || 'พิมพ์เพื่อค้นหา หรือคลิกเพื่อดูทั้งหมด') + '" value="' +
+    SP.esc(sel ? sel.name : '') + '">' +
+    '\x3cdiv id="' + listId + '" class="search-list" style="display:none;position:absolute;z-index:20;left:0;right:0">\x3c/div>' +
+    '\x3c/div>';
+  $('#' + containerId).html(h);
+
+  function render(q) {
+    var qq = String(q || '').toLowerCase();
+    var list = items.filter(function (i) {
+      if (!qq) return true;
+      return (i.name + ' ' + (i.sub || '')).toLowerCase().indexOf(qq) > -1;
+    }).slice(0, 60);
+    if (!list.length) {
+      $('#' + listId).html('\x3cdiv class="si text-muted">ไม่พบรายการ\x3c/div>').show();
+      return;
+    }
+    var hh = '';
+    list.forEach(function (i) {
+      hh += '\x3cdiv class="si" data-id="' + SP.esc(i.id) + '">' +
+        '\x3cdiv class="t-main">' + SP.esc(i.name) + '\x3c/div>' +
+        (i.sub ? '\x3cdiv class="t-sub">' + SP.esc(i.sub) + '\x3c/div>' : '') + '\x3c/div>';
+    });
+    $('#' + listId).html(hh).show();
+  }
+  $('#' + inputId).on('focus click', function () { render($(this).val() === (sel ? sel.name : '') ? '' : $(this).val()); });
+  $('#' + inputId).on('input', function () { sel = null; render($(this).val()); });
+  $('#' + listId).on('click', '.si', function () {
+    var id = $(this).data('id');
+    sel = items.filter(function (i) { return String(i.id) === String(id); })[0];
+    if (!sel) return;
+    $('#' + inputId).val(sel.name);
+    $('#' + listId).hide();
+    if (opt.onPick) opt.onPick(sel);
+  });
+  $(document).off('click.pick_' + containerId).on('click.pick_' + containerId, function (e) {
+    if (!$(e.target).closest('#' + containerId).length) $('#' + listId).hide();
+  });
+  return { get: function () { return sel; }, set: function (i) { sel = i; $('#' + inputId).val(i ? i.name : ''); } };
+};
+
+/* ============================================================
+   SP.scan — เอนจินรับบาร์โค้ด
+   แยก "ยิงด้วยเครื่อง" ออกจาก "พิมพ์มือ" ด้วยความเร็วระหว่างคีย์
+   ============================================================ */
+SP.scan = {
+  MODE: 'auto',      // auto = ยิงรัว +1 | qty = ยิงแล้วใส่จำนวน | info = ยิงเช็คข้อมูล
+  _keepFocus: false,
+  loadIndex: function () {
+    return SP.api('apiScanIndex').then(function (r) {
+      SP.scanIndex = r.data.index || {};
+      SP.balances = r.data.balances || {};
+      SP.lots = r.data.lots || [];
+      return r.data;
+    });
+  },
+  lookup: function (code) {
+    var c = String(code || '').trim();
+    if (!c) return null;
+    return SP.scanIndex[c] || SP.scanIndex[c.toUpperCase()] || null;
+  },
+  qtyAt: function (productId, locationId) {
+    return SP.n(SP.balances[productId + '|' + locationId]);
+  },
+  /**
+   * ผูกช่องรับบาร์โค้ด
+   * onHit(hit, rawCode, isScanner)  |  onMiss(rawCode)
+   */
+  attach: function (selector, onHit, onMiss) {
+    var $in = $(selector);
+    var last = 0, fast = 0, count = 0;
+    SP.scan._keepFocus = true;
+    $('#scanStatus').addClass('armed');
+    $('#scanStatusText').text('พร้อมยิง');
+
+    $in.off('.scan').on('keydown.scan', function (e) {
+      var now = Date.now();
+      if (e.key && e.key.length === 1) {
+        count++;
+        if (last && (now - last) < 35) fast++;
+        last = now;
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        var raw = String($in.val() || '').trim();
+        var isScanner = count > 3 && (fast / Math.max(count - 1, 1)) > 0.6;
+        last = 0; fast = 0; count = 0;
+        $in.val('');
+        if (!raw) return;
+        var hit = SP.scan.lookup(raw);
+        if (hit) { SP.beep('ok'); onHit(hit, raw, isScanner); }
+        else { SP.beep('bad'); if (onMiss) onMiss(raw); }
+      }
+    });
+
+    // โฟกัสค้างไว้เสมอ เพื่อให้ยิงได้ตลอดโดยไม่ต้องคลิก
+    $(document).off('click.scanfocus').on('click.scanfocus', function (e) {
+      if (!SP.scan._keepFocus) return;
+      if ($(e.target).is('input,textarea,select,button,a,.si')) return;
+      if ($('.modal.show').length) return;
+      setTimeout(function () { $in.focus(); }, 30);
+    });
+    setTimeout(function () { $in.focus(); }, 120);
+  },
+  detach: function () {
+    SP.scan._keepFocus = false;
+    $(document).off('click.scanfocus');
+    $('#scanStatus').removeClass('armed');
+    $('#scanStatusText').text('ปิดอยู่');
+  },
+  /** แผงยิงบาร์โค้ดมาตรฐาน */
+  panel: function (id, opt) {
+    opt = opt || {};
+    return '\x3cdiv class="scan-panel">' +
+      '\x3cdiv class="scan-title">\x3ci class="bi bi-upc-scan">\x3c/i> ' +
+      SP.esc(opt.title || 'ยิงบาร์โค้ด / พิมพ์รหัสสินค้า แล้วกด Enter') + '\x3c/div>' +
+      '\x3cinput id="' + id + '" class="form-control scan-input" autocomplete="off" placeholder="รอรับบาร์โค้ด...">' +
+      '\x3cdiv class="scan-modes" id="' + id + '_modes">' +
+      '\x3cbutton data-m="auto" class="on">ยิงรัว +1\x3c/button>' +
+      '\x3cbutton data-m="qty">ยิงแล้วใส่จำนวน\x3c/button>' +
+      (opt.info === false ? '' : '\x3cbutton data-m="info">เช็คข้อมูล\x3c/button>') +
+      '\x3cbutton data-m="cam" class="ms-auto">\x3ci class="bi bi-camera">\x3c/i> กล้อง\x3c/button>' +
+      '\x3c/div>' +
+      '\x3cdiv class="scan-hint">' +
+      SP.esc(opt.hint || 'ตั้งเครื่องยิงให้ลงท้ายด้วย Enter (suffix CR) · ช่องนี้จะโฟกัสอัตโนมัติ') +
+      '\x3c/div>\x3c/div>';
+  },
+  bindModes: function (id, onCam) {
+    $('#' + id + '_modes').off('click').on('click', 'button', function () {
+      var m = $(this).data('m');
+      if (m === 'cam') { if (onCam) onCam(); return; }
+      SP.scan.MODE = m;
+      $('#' + id + '_modes button[data-m!="cam"]').removeClass('on');
+      $(this).addClass('on');
+      $('#' + id).focus();
+    });
+  },
+  /** สแกนด้วยกล้องมือถือ */
+  camera: function (onCode) {
+    var boxId = 'camBox_' + SP.uid();
+    SP.ui.openForm({
+      title: 'สแกนด้วยกล้อง',
+      hideSave: true,
+      body: '\x3cdiv id="' + boxId + '" style="width:100%">\x3c/div>' +
+        '\x3cdiv class="t-sub mt-2">หันกล้องไปที่บาร์โค้ด ระบบจะอ่านอัตโนมัติ\x3c/div>',
+      onShown: function () {
+        try {
+          var q = new Html5Qrcode(boxId);
+          SP._cam = q;
+          q.start({ facingMode: 'environment' }, { fps: 10, qrbox: { width: 250, height: 150 } },
+            function (txt) {
+              q.stop().then(function () { SP.ui.closeForm(); onCode(txt); });
+            }, function () { });
+        } catch (e) { SP.toast('เปิดกล้องไม่ได้: ' + e.message, 'bad'); }
+      }
+    });
+    $('#spModal').one('hidden.bs.modal', function () {
+      if (SP._cam) { try { SP._cam.stop(); } catch (e) { } SP._cam = null; }
+    });
+  }
+};
+
+/* ============================================================
+   AUTH + ROUTER
+   ============================================================ */
+SP.forceLogout = function (msg) {
+  SP.token = null; SP.user = null;
+  try { localStorage.removeItem('sb_token'); } catch (e) { }
+  $('#appScreen').hide(); $('#loginScreen').show();
+  if (msg) $('#liMsg').text(msg);
+};
+
+SP.doLogin = function () {
+  var u = $('#liUser').val(), p = $('#liPass').val();
+  if (!u || !p) { $('#liMsg').text('กรุณากรอกชื่อผู้ใช้และรหัสผ่าน'); return; }
+  $('#liMsg').text(''); SP.busy(true);
+  SP.srun('apiLogin', u, p)
+    .then(function (r) {
+      SP.token = r.data.token; SP.user = r.data.user;
+      try { localStorage.setItem('sb_token', SP.token); } catch (e) { }
+      return SP.startApp();
+    })
+    .catch(function (e) { $('#liMsg').text(e.message); })
+    .then(function () { SP.busy(false); }, function () { SP.busy(false); });
+};
+
+SP.startApp = function () {
+  return SP.api('apiBootstrap').then(function (r) {
+    SP.boot = r.data;
+    SP.user = r.data.user;
+    $('#loginScreen').hide();
+    $('#appScreen').show();
+    $('#topUserName').text(SP.user.name);
+    $('#sideUser').text(SP.user.name);
+    $('#topUserRole').text(SP.boot.roles[SP.user.role] || SP.user.role);
+    if (SP.boot.settings && SP.boot.settings.orgName) $('#brandOrg').text(SP.boot.settings.orgName);
+    // ซ่อนเมนูตามสิทธิ์
+    $('#menu a[data-role]').each(function () {
+      if (!SP.can($(this).data('role'))) $(this).hide();
+    });
+    return SP.scan.loadIndex();
+  }).then(function () {
+    SP.route();
+  });
+};
+
+SP.route = function () {
+  var page = (location.hash || '#dashboard').replace('#', '').split('?')[0];
+  if (!SP.pages[page]) page = 'dashboard';
+  var link = $('#menu a[data-page="' + page + '"]');
+  if (link.length && link.data('role') && !SP.can(link.data('role'))) {
+    SP.toast('คุณไม่มีสิทธิ์เข้าหน้านี้', 'bad');
+    page = 'dashboard';
+  }
+  SP.scan.detach();
+  SP.current = page;
+  $('#menu a').removeClass('active');
+  $('#menu a[data-page="' + page + '"]').addClass('active');
+  $('#pageTitle').text($('#menu a[data-page="' + page + '"]').text().trim() || 'แดชบอร์ด');
+  $('#sidebar').removeClass('open'); $('#sidebarBackdrop').removeClass('show');
+  $('#content').off().html('\x3cdiv class="page-loading">\x3cdiv class="spinner-border text-primary">\x3c/div>\x3c/div>');
+  try {
+    var res = SP.pages[page]();
+    if (res && res.catch) res.catch(function (e) { SP.pageError(e); });
+  } catch (e) { SP.pageError(e); }
+};
+
+SP.pageError = function (e) {
+  $('#content').html('\x3cdiv class="page">\x3cdiv class="card-x">\x3cdiv class="card-x-body">' +
+    '\x3cdiv class="empty-state">\x3ci class="bi bi-exclamation-octagon">\x3c/i>' +
+    'โหลดหน้านี้ไม่สำเร็จ\x3cbr>\x3cspan class="t-sub">' + SP.esc(e.message || e) + '\x3c/span>\x3c/div>' +
+    '\x3c/div>\x3c/div>\x3c/div>');
+  SP.toast(e.message || String(e), 'bad');
+};
+
+/* helper: วาดหน้า */
+/* off() ก่อนวาดใหม่ทุกครั้ง — กัน delegated handler ซ้อนกันเมื่อเข้าหน้าเดิมหลายรอบ */
+SP.render = function (html) {
+  $('#content').off().html('\x3cdiv class="page">' + html + '\x3c/div>');
+};
+
+SP.card = function (title, bodyHtml, headExtra, tight) {
+  return '\x3cdiv class="card-x">' +
+    (title ? '\x3cdiv class="card-x-head">\x3ch6>' + SP.esc(title) + '\x3c/h6>' +
+      (headExtra ? '\x3cdiv class="spacer">\x3c/div>' + headExtra : '') + '\x3c/div>' : '') +
+    '\x3cdiv class="card-x-body' + (tight ? ' tight' : '') + '">' + bodyHtml + '\x3c/div>\x3c/div>';
+};
+
+SP.empty = function (text, icon) {
+  return '\x3cdiv class="empty-state">\x3ci class="bi bi-' + (icon || 'inbox') + '">\x3c/i>' +
+    SP.esc(text || 'ยังไม่มีข้อมูล') + '\x3c/div>';
+};
+
+SP.exportCsv = function (filename, headers, rows) {
+  var lines = [headers.join(',')];
+  rows.forEach(function (r) {
+    lines.push(r.map(function (c) {
+      var s = String(c === null || c === undefined ? '' : c);
+      return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    }).join(','));
+  });
+  var blob = new Blob(['\ufeff' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+};
+
+/* ============================================================
+   BOOTSTRAP UI EVENTS
+   ============================================================ */
+$(function () {
+  $('#btnLogin').on('click', SP.doLogin);
+  $('#liPass, #liUser').on('keydown', function (e) { if (e.key === 'Enter') SP.doLogin(); });
+
+  $('#btnLogout').on('click', function (e) {
+    e.preventDefault();
+    SP.api('apiLogout').catch(function () { }).then(function () { SP.forceLogout(); });
+  });
+
+  $('#btnChangePw').on('click', function (e) {
+    e.preventDefault();
+    SP.ui.openForm({
+      title: 'เปลี่ยนรหัสผ่าน',
+      body: SP.ui.field('cpOld', 'รหัสผ่านเดิม', '', { type: 'password' }) +
+        SP.ui.field('cpNew', 'รหัสผ่านใหม่', '', { type: 'password', help: 'อย่างน้อย 6 ตัวอักษร' }) +
+        SP.ui.field('cpNew2', 'ยืนยันรหัสผ่านใหม่', '', { type: 'password' }),
+      onSave: function () {
+        if (SP.ui.val('cpNew') !== SP.ui.val('cpNew2')) { SP.toast('รหัสผ่านใหม่ไม่ตรงกัน', 'bad'); return; }
+        SP.busy(true);
+        SP.api('apiChangePassword', SP.ui.val('cpOld'), SP.ui.val('cpNew'))
+          .then(function (r) { SP.toast(r.message, 'ok'); SP.ui.closeForm(); })
+          .catch(function (e) { SP.toast(e.message, 'bad'); })
+          .then(function () { SP.busy(false); }, function () { SP.busy(false); });
+      }
+    });
+  });
+
+  $('#btnMenu').on('click', function () {
+    $('#sidebar').toggleClass('open');
+    $('#sidebarBackdrop').toggleClass('show');
+  });
+  $('#sidebarBackdrop').on('click', function () {
+    $('#sidebar').removeClass('open'); $(this).removeClass('show');
+  });
+
+  /* กันเมนูพาออกนอกกรอบแอป: <base target="_top"> ทำให้ <a href="#page">
+     ที่ปล่อยให้เบราว์เซอร์นำทางเองกลายเป็นนำทาง top frame ออกจาก iframe
+     ของ Apps Script ไปที่ URL ของ iframe ตรงๆ (หน้าขาว) จึงต้องดักคลิกแล้ว
+     สั่งเปลี่ยน hash ด้วย JS แทน ไม่ปล่อยให้ <a> นำทางเอง */
+  $('#menu').on('click', 'a[data-page]', function (e) {
+    e.preventDefault();
+    var page = $(this).data('page');
+    if (location.hash.replace('#', '') === page) { SP.route(); }
+    else { location.hash = page; }
+  });
+
+  $(window).on('hashchange', function () { SP.route(); });
+
+  // auto login ด้วย token เดิม
+  var saved = null;
+  try { saved = localStorage.getItem('sb_token'); } catch (e) { }
+  if (saved) {
+    SP.token = saved;
+    SP.busy(true);
+    SP.startApp()
+      .catch(function () { SP.forceLogout(); })
+      .then(function () { SP.busy(false); }, function () { SP.busy(false); });
+  }
+});
+</script>

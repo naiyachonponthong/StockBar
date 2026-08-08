@@ -1,0 +1,542 @@
+<script>
+/* ============================================================
+   หน้า: แดชบอร์ด
+   ============================================================ */
+SP.pages.dashboard = function () {
+  return SP.api('apiDashboard').then(function (r) {
+    var d = r.data;
+
+    var strip = '\x3cdiv class="stat-strip">' +
+      '\x3cdiv class="stat lead">\x3cdiv class="stat-label">มูลค่าสินค้าคงคลังรวม\x3c/div>' +
+      '\x3cdiv class="stat-value">' + SP.money(d.totalValue) + '\x3c/div>' +
+      '\x3cdiv class="stat-note">คิดจากต้นทุนเฉลี่ยถ่วงน้ำหนัก\x3c/div>\x3c/div>' +
+      '\x3cdiv class="stat">\x3cdiv class="stat-label">รายการสินค้า\x3c/div>' +
+      '\x3cdiv class="stat-value">' + SP.fmt(d.productCount) + '\x3c/div>' +
+      '\x3cdiv class="stat-note">คงเหลือ 0 จำนวน ' + SP.fmt(d.zeroCount) + ' รายการ\x3c/div>\x3c/div>' +
+      '\x3cdiv class="stat">\x3cdiv class="stat-label">จำนวนชิ้นคงเหลือ\x3c/div>' +
+      '\x3cdiv class="stat-value">' + SP.fmt(d.totalQty) + '\x3c/div>\x3c/div>' +
+      '\x3cdiv class="stat' + (d.lowCount ? ' warn' : '') + '">\x3cdiv class="stat-label">ต่ำกว่าขั้นต่ำ\x3c/div>' +
+      '\x3cdiv class="stat-value">' + SP.fmt(d.lowCount) + '\x3c/div>' +
+      '\x3cdiv class="stat-note">ต้องสั่งเพิ่ม\x3c/div>\x3c/div>' +
+      '\x3c/div>';
+
+    // กราฟเข้า-ออก 14 วัน
+    var maxV = 1;
+    (d.series || []).forEach(function (s) { maxV = Math.max(maxV, s.inQty, s.outQty); });
+    var chart = '\x3cdiv style="display:flex;gap:6px;align-items:flex-end;height:150px;padding-top:8px">';
+    (d.series || []).forEach(function (s) {
+      var hi = Math.round((s.inQty / maxV) * 120), ho = Math.round((s.outQty / maxV) * 120);
+      chart += '\x3cdiv style="flex:1;text-align:center" title="' + s.date + ' รับ ' + s.inQty + ' / จ่าย ' + s.outQty + '">' +
+        '\x3cdiv style="display:flex;gap:2px;align-items:flex-end;justify-content:center;height:124px">' +
+        '\x3cdiv style="width:9px;height:' + Math.max(hi, 2) + 'px;background:oklch(0.60 0.115 155);border-radius:3px 3px 0 0">\x3c/div>' +
+        '\x3cdiv style="width:9px;height:' + Math.max(ho, 2) + 'px;background:oklch(0.56 0.165 27);border-radius:3px 3px 0 0">\x3c/div>' +
+        '\x3c/div>' +
+        '\x3cdiv class="t-sub" style="font-size:10px">' + s.date.slice(8) + '\x3c/div>\x3c/div>';
+    });
+    chart += '\x3c/div>';
+    if (!(d.series || []).length) chart = SP.empty('ยังไม่มีการเคลื่อนไหวใน 14 วันล่าสุด', 'graph-up');
+    chart += '\x3cdiv class="t-sub mt-2">\x3cspan class="badge-x b-in">รับเข้า\x3c/span> \x3cspan class="badge-x b-out">จ่ายออก\x3c/span>\x3c/div>';
+
+    // ของใกล้หมด
+    var lowHtml;
+    if (!(d.low || []).length) lowHtml = SP.empty('ไม่มีสินค้าต่ำกว่าขั้นต่ำ', 'check2-circle');
+    else {
+      lowHtml = '\x3ctable class="table-x">\x3cthead>\x3ctr>\x3cth>สินค้า\x3c/th>' +
+        '\x3cth class="text-num">คงเหลือ\x3c/th>\x3cth style="width:110px">ระดับ\x3c/th>\x3c/tr>\x3c/thead>\x3ctbody>';
+      d.low.forEach(function (x) {
+        var pct = x.minQty > 0 ? Math.min(100, Math.round((x.qty / x.minQty) * 100)) : 0;
+        lowHtml += '\x3ctr>\x3ctd>\x3cdiv class="t-main">' + SP.esc(x.name) + '\x3c/div>' +
+          '\x3cdiv class="t-sub mono">' + SP.esc(x.code) + '\x3c/div>\x3c/td>' +
+          '\x3ctd class="text-num">' + SP.fmt(x.qty) + ' / ' + SP.fmt(x.minQty) + ' \x3cspan class="t-sub">' + SP.esc(x.unit) + '\x3c/span>\x3c/td>' +
+          '\x3ctd>\x3cdiv class="mini-bar' + (pct < 50 ? ' low' : '') + '">\x3cspan style="width:' + pct + '%">\x3c/span>\x3c/div>\x3c/td>\x3c/tr>';
+      });
+      lowHtml += '\x3c/tbody>\x3c/table>';
+    }
+
+    // เคลื่อนไหวล่าสุด
+    var recHtml;
+    if (!(d.recent || []).length) recHtml = SP.empty('ยังไม่มีรายการ', 'clock-history');
+    else {
+      recHtml = '\x3ctable class="table-x">\x3ctbody>';
+      d.recent.forEach(function (m) {
+        recHtml += '\x3ctr>\x3ctd style="width:112px" class="t-sub">' + SP.dt(m.ts) + '\x3c/td>' +
+          '\x3ctd>' + SP.typeBadge(m.type) + '\x3c/td>' +
+          '\x3ctd>\x3cdiv class="t-main">' + SP.esc(m.name) + '\x3c/div>' +
+          '\x3cdiv class="t-sub mono">' + SP.esc(m.docNo) + '\x3c/div>\x3c/td>' +
+          '\x3ctd class="text-num">' + (m.qty > 0 ? '+' : '') + SP.fmt(m.qty, 2) + ' \x3cspan class="t-sub">' + SP.esc(m.unit) + '\x3c/span>\x3c/td>\x3c/tr>';
+      });
+      recHtml += '\x3c/tbody>\x3c/table>';
+    }
+
+    SP.render(strip +
+      SP.card('การเคลื่อนไหว 14 วันล่าสุด', chart) +
+      '\x3cdiv class="row g-3">' +
+      '\x3cdiv class="col-lg-5">' + SP.card('สินค้าใกล้หมด', lowHtml, '', true) + '\x3c/div>' +
+      '\x3cdiv class="col-lg-7">' + SP.card('รายการล่าสุด', recHtml, '', true) + '\x3c/div>' +
+      '\x3c/div>');
+  });
+};
+
+SP.typeBadge = function (t) {
+  var map = {
+    in: ['b-in', 'รับเข้า'], out: ['b-out', 'จ่ายออก'],
+    transfer_in: ['b-tr', 'โอนเข้า'], transfer_out: ['b-tr', 'โอนออก'],
+    count: ['b-ct', 'ตรวจนับ'], adjust: ['b-ct', 'ปรับยอด'], void: ['b-muted', 'ยกเลิก']
+  };
+  var m = map[t] || ['b-muted', t];
+  return '\x3cspan class="badge-x ' + m[0] + '">' + SP.esc(m[1]) + '\x3c/span>';
+};
+
+/* ============================================================
+   หน้า: ยอดคงเหลือ
+   ============================================================ */
+SP.pages.balance = function () {
+  return SP.api('apiBalances').then(function (r) {
+    var rows = r.data || [];
+    var head = '\x3cbutton class="btn btn-sm btn-light" id="blExport">\x3ci class="bi bi-download">\x3c/i> ส่งออก CSV\x3c/button>' +
+      (SP.can('admin,manager') ? ' \x3cbutton class="btn btn-sm btn-light" id="blRebuild" title="คำนวณยอดใหม่จากบัญชีเคลื่อนไหวทั้งหมด">\x3ci class="bi bi-arrow-repeat">\x3c/i> คำนวณยอดใหม่\x3c/button>' : '');
+
+    SP.render(
+      '\x3cdiv class="filter-row mb-3">' +
+      '\x3cdiv class="fi flex-grow-1">\x3clabel class="form-label">ค้นหา\x3c/label>' +
+      '\x3cinput id="blQ" class="form-control" placeholder="รหัส / ชื่อสินค้า">\x3c/div>' +
+      SP.ui.select('blLoc', 'คลัง', '', SP.boot.locations || [], { wrap: 'fi', blankText: 'ทุกคลัง' }) +
+      SP.ui.select('blF', 'แสดง', '', [{ id: 'low', name: 'ต่ำกว่าขั้นต่ำ' }, { id: 'has', name: 'มีของ' }], { wrap: 'fi', blankText: 'ทั้งหมด' }) +
+      '\x3c/div>' +
+      SP.card('ยอดคงเหลือแยกตามคลัง', '\x3cdiv id="blTable">\x3c/div>', head, true)
+    );
+
+    function draw() {
+      var q = String($('#blQ').val() || '').toLowerCase();
+      var loc = $('#blLoc').val(), f = $('#blF').val();
+      var list = rows.filter(function (x) {
+        if (loc && x.locationId !== loc) return false;
+        if (f === 'low' && !(x.minQty > 0 && x.qty <= x.minQty)) return false;
+        if (f === 'has' && x.qty <= 0) return false;
+        if (q && (x.code + ' ' + x.name).toLowerCase().indexOf(q) === -1) return false;
+        return true;
+      });
+      if (!list.length) { $('#blTable').html(SP.empty('ไม่พบข้อมูล')); return; }
+      var h = '\x3cdiv class="table-wrap">\x3ctable class="table-x">\x3cthead>\x3ctr>' +
+        '\x3cth>รหัส\x3c/th>\x3cth>สินค้า\x3c/th>\x3cth>คลัง\x3c/th>' +
+        '\x3cth class="text-num">คงเหลือ\x3c/th>\x3cth class="text-num">ขั้นต่ำ\x3c/th>' +
+        '\x3cth class="text-num">ทุน/หน่วย\x3c/th>\x3cth class="text-num">มูลค่า\x3c/th>\x3cth>\x3c/th>\x3c/tr>\x3c/thead>\x3ctbody>';
+      list.forEach(function (x) {
+        var low = x.minQty > 0 && x.qty <= x.minQty;
+        h += '\x3ctr>\x3ctd class="mono">' + SP.esc(x.code) + '\x3c/td>' +
+          '\x3ctd class="t-main">' + SP.esc(x.name) + '\x3c/td>' +
+          '\x3ctd>' + SP.esc(x.locationName) + '\x3c/td>' +
+          '\x3ctd class="text-num">' + (low ? '\x3cspan class="badge-x b-out">' + SP.fmt(x.qty, 2) + '\x3c/span>' : SP.fmt(x.qty, 2)) +
+          ' \x3cspan class="t-sub">' + SP.esc(x.unit) + '\x3c/span>\x3c/td>' +
+          '\x3ctd class="text-num t-sub">' + SP.fmt(x.minQty) + '\x3c/td>' +
+          '\x3ctd class="text-num">' + SP.money(x.avgCost) + '\x3c/td>' +
+          '\x3ctd class="text-num">' + SP.money(x.value) + '\x3c/td>' +
+          '\x3ctd class="text-end">\x3cbutton class="btn btn-light btn-icon blCard" data-id="' + SP.esc(x.productId) +
+          '" title="การ์ดสินค้า">\x3ci class="bi bi-card-list">\x3c/i>\x3c/button>\x3c/td>\x3c/tr>';
+      });
+      h += '\x3c/tbody>\x3c/table>\x3c/div>' +
+        '\x3cdiv class="total-bar">\x3cdiv>\x3cspan class="tb-label">รายการ\x3c/span> \x3cspan class="tb-value">' + list.length + '\x3c/span>\x3c/div>' +
+        '\x3cdiv class="ms-auto">\x3cspan class="tb-label">มูลค่ารวม\x3c/span> \x3cspan class="tb-value">' +
+        SP.money(list.reduce(function (s, x) { return s + x.value; }, 0)) + '\x3c/span>\x3c/div>\x3c/div>';
+      $('#blTable').html(h);
+      SP._blList = list;
+    }
+    draw();
+    $('#blQ').on('input', draw);
+    $('#blLoc,#blF').on('change', draw);
+    $('#content').on('click', '.blCard', function () { location.hash = '#stockcard?p=' + $(this).data('id'); });
+    $('#blExport').on('click', function () {
+      SP.exportCsv('balance.csv', ['code', 'name', 'location', 'qty', 'unit', 'minQty', 'avgCost', 'value'],
+        (SP._blList || []).map(function (x) {
+          return [x.code, x.name, x.locationName, x.qty, x.unit, x.minQty, x.avgCost, x.value];
+        }));
+    });
+    $('#blRebuild').on('click', function () {
+      SP.ui.confirm('คำนวณยอดคงเหลือใหม่ทั้งหมดจากบัญชีเคลื่อนไหว?', function () {
+        SP.busy(true);
+        SP.api('apiRebuildBalances')
+          .then(function (rr) { SP.toast(rr.message, 'ok'); return SP.scan.loadIndex(); })
+          .then(function () { SP.route(); })
+          .catch(function (e) { SP.toast(e.message, 'bad'); })
+          .then(function () { SP.busy(false); }, function () { SP.busy(false); });
+      });
+    });
+  });
+};
+
+/* ============================================================
+   หน้า: การ์ดสินค้า
+   ============================================================ */
+SP.pages.stockcard = function () {
+  var hash = location.hash || '';
+  var pid = '';
+  var m = hash.match(/p=([^&]+)/);
+  if (m) pid = decodeURIComponent(m[1]);
+
+  var items = [];
+  for (var code in SP.scanIndex) {
+    var h = SP.scanIndex[code];
+    if (items.filter(function (x) { return x.id === h.productId; }).length) continue;
+    items.push({ id: h.productId, name: h.name, sub: h.code });
+  }
+
+  var d = new Date(); d.setMonth(d.getMonth() - 3);
+  SP.render(
+    '\x3cdiv class="filter-row mb-3">' +
+    '\x3cdiv class="fi flex-grow-1 mb-3">\x3clabel class="form-label">สินค้า\x3c/label>\x3cdiv id="scPick">\x3c/div>\x3c/div>' +
+    SP.ui.select('scLoc', 'คลัง', '', SP.boot.locations || [], { wrap: 'fi', blankText: 'ทุกคลัง' }) +
+    SP.ui.field('scFrom', 'ตั้งแต่', d.toISOString().slice(0, 10), { wrap: 'fi', type: 'date' }) +
+    SP.ui.field('scTo', 'ถึง', SP.today(), { wrap: 'fi', type: 'date' }) +
+    '\x3cdiv class="fi mb-3">\x3cbutton class="btn btn-primary w-100" id="scGo">แสดง\x3c/button>\x3c/div>' +
+    '\x3c/div>' +
+    '\x3cdiv id="scResult">' + SP.empty('เลือกสินค้าเพื่อดูการ์ดสินค้า', 'card-list') + '\x3c/div>'
+  );
+
+  var picker = SP.ui.picker('scPick', { items: items, value: pid, placeholder: 'คลิกเพื่อดูรายการ หรือพิมพ์ค้นหา' });
+
+  function load() {
+    var sel = picker.get();
+    if (!sel) { SP.toast('กรุณาเลือกสินค้า', 'bad'); return; }
+    SP.busy(true);
+    SP.api('apiStockCard', sel.id, $('#scFrom').val(), $('#scTo').val(), $('#scLoc').val())
+      .then(function (r) {
+        var p = r.data.product, rows = r.data.rows || [];
+        var hh = '\x3cdiv class="stat-strip">' +
+          '\x3cdiv class="stat lead">\x3cdiv class="stat-label">' + SP.esc(p.code) + '\x3c/div>' +
+          '\x3cdiv class="stat-value" style="font-size:19px">' + SP.esc(p.name) + '\x3c/div>\x3c/div>' +
+          '\x3cdiv class="stat">\x3cdiv class="stat-label">คงเหลือปัจจุบัน\x3c/div>\x3cdiv class="stat-value">' +
+          SP.fmt(rows.length ? rows[rows.length - 1].balance : 0, 2) + '\x3c/div>\x3c/div>' +
+          '\x3cdiv class="stat">\x3cdiv class="stat-label">ทุนเฉลี่ย\x3c/div>\x3cdiv class="stat-value">' + SP.money(p.avgCost) + '\x3c/div>\x3c/div>' +
+          '\x3cdiv class="stat">\x3cdiv class="stat-label">รายการเคลื่อนไหว\x3c/div>\x3cdiv class="stat-value">' + rows.length + '\x3c/div>\x3c/div>' +
+          '\x3c/div>';
+        var t;
+        if (!rows.length) t = SP.empty('ไม่มีการเคลื่อนไหวในช่วงนี้');
+        else {
+          t = '\x3cdiv class="table-wrap">\x3ctable class="table-x">\x3cthead>\x3ctr>' +
+            '\x3cth>วันที่\x3c/th>\x3cth>ประเภท\x3c/th>\x3cth>เลขที่\x3c/th>\x3cth>คลัง\x3c/th>' +
+            '\x3cth class="text-num">รับ\x3c/th>\x3cth class="text-num">จ่าย\x3c/th>' +
+            '\x3cth class="text-num">คงเหลือ\x3c/th>\x3cth>หมายเหตุ\x3c/th>\x3c/tr>\x3c/thead>\x3ctbody>';
+          rows.forEach(function (x) {
+            t += '\x3ctr>\x3ctd class="t-sub">' + SP.dt(x.ts) + '\x3c/td>' +
+              '\x3ctd>' + SP.typeBadge(x.type) + '\x3c/td>' +
+              '\x3ctd class="mono">' + SP.esc(x.docNo) + '\x3c/td>' +
+              '\x3ctd>' + SP.esc(x.locationName) + '\x3c/td>' +
+              '\x3ctd class="text-num">' + (x.inQty ? SP.fmt(x.inQty, 2) : '') + '\x3c/td>' +
+              '\x3ctd class="text-num">' + (x.outQty ? SP.fmt(x.outQty, 2) : '') + '\x3c/td>' +
+              '\x3ctd class="text-num"><b>' + SP.fmt(x.balance, 2) + '\x3c/b>\x3c/td>' +
+              '\x3ctd class="t-sub">' + SP.esc(x.note) + '\x3c/td>\x3c/tr>';
+          });
+          t += '\x3c/tbody>\x3c/table>\x3c/div>';
+        }
+        $('#scResult').html(hh + SP.card('ประวัติการเคลื่อนไหว', t,
+          '\x3cbutton class="btn btn-sm btn-light" id="scPrint">\x3ci class="bi bi-printer">\x3c/i> พิมพ์\x3c/button>', true));
+        $('#scPrint').on('click', function () { window.print(); });
+      })
+      .catch(function (e) { SP.toast(e.message, 'bad'); })
+      .then(function () { SP.busy(false); }, function () { SP.busy(false); });
+  }
+  $('#scGo').on('click', load);
+  if (pid) setTimeout(load, 200);
+  return Promise.resolve();
+};
+
+/* ============================================================
+   หน้า: รายงานรวม
+   ============================================================ */
+SP.pages.reports = function () {
+  var tabs = [
+    { id: 'move', name: 'รายงานเข้า-ออก' },
+    { id: 'val', name: 'มูลค่าสินค้าคงคลัง' },
+    { id: 'dead', name: 'สินค้าไม่เคลื่อนไหว' }
+  ];
+  var d = new Date(); d.setDate(d.getDate() - 30);
+
+  SP.render(
+    '\x3cdiv class="filter-row mb-3">' +
+    SP.ui.select('rpTab', 'รายงาน', 'move', tabs, { wrap: 'fi', blank: false }) +
+    SP.ui.field('rpFrom', 'ตั้งแต่', d.toISOString().slice(0, 10), { wrap: 'fi', type: 'date' }) +
+    SP.ui.field('rpTo', 'ถึง', SP.today(), { wrap: 'fi', type: 'date' }) +
+    SP.ui.select('rpType', 'ประเภท', '', [
+      { id: 'in', name: 'รับเข้า' }, { id: 'out', name: 'จ่ายออก' },
+      { id: 'transfer_in', name: 'โอนเข้า' }, { id: 'transfer_out', name: 'โอนออก' },
+      { id: 'count', name: 'ตรวจนับ' }, { id: 'adjust', name: 'ปรับยอด' }
+    ], { wrap: 'fi', blankText: 'ทุกประเภท' }) +
+    SP.ui.select('rpLoc', 'คลัง', '', SP.boot.locations || [], { wrap: 'fi', blankText: 'ทุกคลัง' }) +
+    SP.ui.field('rpDays', 'ไม่เคลื่อนไหวเกิน (วัน)', 90, { wrap: 'fi', type: 'number' }) +
+    '\x3cdiv class="fi mb-3">\x3cbutton class="btn btn-primary w-100" id="rpGo">แสดง\x3c/button>\x3c/div>' +
+    '\x3c/div>' +
+    '\x3cdiv id="rpResult">\x3c/div>'
+  );
+
+  function toggleFilters() {
+    var t = $('#rpTab').val();
+    $('#rpFrom,#rpTo,#rpType,#rpLoc').closest('.fi').toggle(t === 'move');
+    $('#rpDays').closest('.fi').toggle(t === 'dead');
+  }
+  toggleFilters();
+  $('#rpTab').on('change', function () { toggleFilters(); load(); });
+
+  function load() {
+    var t = $('#rpTab').val();
+    SP.busy(true);
+    var p;
+    if (t === 'move') p = SP.api('apiReportMovement', $('#rpFrom').val(), $('#rpTo').val(), $('#rpType').val(), $('#rpLoc').val());
+    else if (t === 'val') p = SP.api('apiReportValuation');
+    else p = SP.api('apiReportDeadStock', $('#rpDays').val());
+
+    return p.then(function (r) {
+      if (t === 'move') drawMove(r.data || []);
+      else if (t === 'val') drawVal(r.data || {});
+      else drawDead(r.data || []);
+    }).catch(function (e) { SP.toast(e.message, 'bad'); })
+      .then(function () { SP.busy(false); }, function () { SP.busy(false); });
+  }
+
+  function drawMove(rows) {
+    if (!rows.length) { $('#rpResult').html(SP.card('รายงานเข้า-ออก', SP.empty('ไม่พบข้อมูล'))); return; }
+    var h = '\x3cdiv class="table-wrap">\x3ctable class="table-x">\x3cthead>\x3ctr>' +
+      '\x3cth>วันที่\x3c/th>\x3cth>ประเภท\x3c/th>\x3cth>เลขที่\x3c/th>\x3cth>สินค้า\x3c/th>\x3cth>คลัง\x3c/th>' +
+      '\x3cth class="text-num">จำนวน\x3c/th>\x3cth class="text-num">ทุน/หน่วย\x3c/th>\x3cth class="text-num">มูลค่า\x3c/th>\x3c/tr>\x3c/thead>\x3ctbody>';
+    rows.forEach(function (x) {
+      h += '\x3ctr>\x3ctd class="t-sub">' + SP.dt(x.ts) + '\x3c/td>' +
+        '\x3ctd>' + SP.typeBadge(x.type) + '\x3c/td>' +
+        '\x3ctd class="mono">' + SP.esc(x.docNo) + '\x3c/td>' +
+        '\x3ctd>\x3cdiv class="t-main">' + SP.esc(x.name) + '\x3c/div>\x3cdiv class="t-sub mono">' + SP.esc(x.code) + '\x3c/div>\x3c/td>' +
+        '\x3ctd>' + SP.esc(x.locationName) + '\x3c/td>' +
+        '\x3ctd class="text-num">' + (x.qty > 0 ? '+' : '') + SP.fmt(x.qty, 2) + '\x3c/td>' +
+        '\x3ctd class="text-num">' + SP.money(x.unitCost) + '\x3c/td>' +
+        '\x3ctd class="text-num">' + SP.money(Math.abs(x.value)) + '\x3c/td>\x3c/tr>';
+    });
+    h += '\x3c/tbody>\x3c/table>\x3c/div>';
+    var inQ = rows.filter(function (x) { return x.qty > 0; }).reduce(function (s, x) { return s + x.qty; }, 0);
+    var outQ = rows.filter(function (x) { return x.qty < 0; }).reduce(function (s, x) { return s - x.qty; }, 0);
+    h += '\x3cdiv class="total-bar">\x3cdiv>\x3cspan class="tb-label">รับเข้ารวม\x3c/span> \x3cspan class="tb-value">' + SP.fmt(inQ, 2) + '\x3c/span>\x3c/div>' +
+      '\x3cdiv>\x3cspan class="tb-label">จ่ายออกรวม\x3c/span> \x3cspan class="tb-value">' + SP.fmt(outQ, 2) + '\x3c/span>\x3c/div>' +
+      '\x3cdiv class="ms-auto t-sub">' + rows.length + ' รายการ\x3c/div>\x3c/div>';
+    $('#rpResult').html(SP.card('รายงานเข้า-ออก', h,
+      '\x3cbutton class="btn btn-sm btn-light" id="rpExp">\x3ci class="bi bi-download">\x3c/i> CSV\x3c/button>', true));
+    $('#rpExp').on('click', function () {
+      SP.exportCsv('movement.csv', ['datetime', 'type', 'docNo', 'code', 'name', 'location', 'qty', 'unitCost', 'value'],
+        rows.map(function (x) { return [x.ts, x.type, x.docNo, x.code, x.name, x.locationName, x.qty, x.unitCost, x.value]; }));
+    });
+  }
+
+  function drawVal(data) {
+    var rows = data.rows || [], byCat = data.byCategory || {};
+    var catHtml = '\x3ctable class="table-x">\x3ctbody>';
+    var totalAll = 0;
+    for (var k in byCat) totalAll += byCat[k];
+    for (var k2 in byCat) {
+      var pct = totalAll > 0 ? Math.round((byCat[k2] / totalAll) * 100) : 0;
+      catHtml += '\x3ctr>\x3ctd class="t-main">' + SP.esc(k2) + '\x3c/td>' +
+        '\x3ctd style="width:140px">\x3cdiv class="mini-bar">\x3cspan style="width:' + pct + '%">\x3c/span>\x3c/div>\x3c/td>' +
+        '\x3ctd class="text-num">' + SP.money(byCat[k2]) + '\x3c/td>' +
+        '\x3ctd class="text-num t-sub">' + pct + '%\x3c/td>\x3c/tr>';
+    }
+    catHtml += '\x3c/tbody>\x3c/table>';
+
+    var h = '\x3cdiv class="table-wrap">\x3ctable class="table-x">\x3cthead>\x3ctr>' +
+      '\x3cth>รหัส\x3c/th>\x3cth>สินค้า\x3c/th>\x3cth>หมวด\x3c/th>\x3cth class="text-num">คงเหลือ\x3c/th>' +
+      '\x3cth class="text-num">ทุน/หน่วย\x3c/th>\x3cth class="text-num">มูลค่าทุน\x3c/th>' +
+      '\x3cth class="text-num">มูลค่าขาย\x3c/th>\x3c/tr>\x3c/thead>\x3ctbody>';
+    rows.forEach(function (x) {
+      h += '\x3ctr>\x3ctd class="mono">' + SP.esc(x.code) + '\x3c/td>' +
+        '\x3ctd class="t-main">' + SP.esc(x.name) + '\x3c/td>' +
+        '\x3ctd>' + SP.esc(x.category) + '\x3c/td>' +
+        '\x3ctd class="text-num">' + SP.fmt(x.qty, 2) + ' \x3cspan class="t-sub">' + SP.esc(x.unit) + '\x3c/span>\x3c/td>' +
+        '\x3ctd class="text-num">' + SP.money(x.avgCost) + '\x3c/td>' +
+        '\x3ctd class="text-num">' + SP.money(x.value) + '\x3c/td>' +
+        '\x3ctd class="text-num t-sub">' + SP.money(x.saleValue) + '\x3c/td>\x3c/tr>';
+    });
+    h += '\x3c/tbody>\x3c/table>\x3c/div>' +
+      '\x3cdiv class="total-bar">\x3cdiv class="ms-auto">\x3cspan class="tb-label">มูลค่าทุนรวม\x3c/span> \x3cspan class="tb-value">' +
+      SP.money(totalAll) + '\x3c/span>\x3c/div>\x3c/div>';
+
+    $('#rpResult').html(SP.card('มูลค่าแยกตามหมวด', catHtml, '', true) +
+      SP.card('รายละเอียดรายสินค้า', h,
+        '\x3cbutton class="btn btn-sm btn-light" id="rpExp2">\x3ci class="bi bi-download">\x3c/i> CSV\x3c/button>', true));
+    $('#rpExp2').on('click', function () {
+      SP.exportCsv('valuation.csv', ['code', 'name', 'category', 'qty', 'unit', 'avgCost', 'value', 'saleValue'],
+        rows.map(function (x) { return [x.code, x.name, x.category, x.qty, x.unit, x.avgCost, x.value, x.saleValue]; }));
+    });
+  }
+
+  function drawDead(rows) {
+    if (!rows.length) { $('#rpResult').html(SP.card('สินค้าไม่เคลื่อนไหว', SP.empty('ไม่มีสินค้าค้างสต๊อกตามเงื่อนไข', 'check2-circle'))); return; }
+    var h = '\x3cdiv class="table-wrap">\x3ctable class="table-x">\x3cthead>\x3ctr>' +
+      '\x3cth>รหัส\x3c/th>\x3cth>สินค้า\x3c/th>\x3cth class="text-num">คงเหลือ\x3c/th>' +
+      '\x3cth class="text-num">มูลค่าจม\x3c/th>\x3cth>เคลื่อนไหวล่าสุด\x3c/th>\x3c/tr>\x3c/thead>\x3ctbody>';
+    rows.forEach(function (x) {
+      h += '\x3ctr>\x3ctd class="mono">' + SP.esc(x.code) + '\x3c/td>' +
+        '\x3ctd class="t-main">' + SP.esc(x.name) + '\x3c/td>' +
+        '\x3ctd class="text-num">' + SP.fmt(x.qty, 2) + ' \x3cspan class="t-sub">' + SP.esc(x.unit) + '\x3c/span>\x3c/td>' +
+        '\x3ctd class="text-num">' + SP.money(x.value) + '\x3c/td>' +
+        '\x3ctd class="t-sub">' + SP.esc(x.lastMove) + '\x3c/td>\x3c/tr>';
+    });
+    h += '\x3c/tbody>\x3c/table>\x3c/div>' +
+      '\x3cdiv class="total-bar">\x3cdiv>\x3cspan class="tb-label">รายการ\x3c/span> \x3cspan class="tb-value">' + rows.length + '\x3c/span>\x3c/div>' +
+      '\x3cdiv class="ms-auto">\x3cspan class="tb-label">มูลค่าจมรวม\x3c/span> \x3cspan class="tb-value">' +
+      SP.money(rows.reduce(function (s, x) { return s + x.value; }, 0)) + '\x3c/span>\x3c/div>\x3c/div>';
+    $('#rpResult').html(SP.card('สินค้าไม่เคลื่อนไหว', h, '', true));
+  }
+
+  $('#rpGo').on('click', load);
+  return load();
+};
+
+/* ============================================================
+   หน้า: ผู้ใช้งาน
+   ============================================================ */
+SP.pages.users = function () {
+  return SP.api('apiListUsers').then(function (r) {
+    var list = r.data || [];
+    var roleItems = Object.keys(SP.boot.roles).map(function (k) { return { id: k, name: SP.boot.roles[k] }; });
+
+    var h = '\x3cdiv class="table-wrap">\x3ctable class="table-x">\x3cthead>\x3ctr>' +
+      '\x3cth>ชื่อผู้ใช้\x3c/th>\x3cth>ชื่อ-สกุล\x3c/th>\x3cth>สิทธิ์\x3c/th>\x3cth>สถานะ\x3c/th>\x3cth>\x3c/th>\x3c/tr>\x3c/thead>\x3ctbody>';
+    list.forEach(function (u) {
+      h += '\x3ctr>\x3ctd class="mono">' + SP.esc(u.username) + '\x3c/td>' +
+        '\x3ctd class="t-main">' + SP.esc(u.name) + '\x3c/td>' +
+        '\x3ctd>\x3cspan class="badge-x b-tr">' + SP.esc(SP.boot.roles[u.role] || u.role) + '\x3c/span>\x3c/td>' +
+        '\x3ctd>' + (u.active ? '\x3cspan class="badge-x b-in">ใช้งาน\x3c/span>' : '\x3cspan class="badge-x b-muted">ปิด\x3c/span>') + '\x3c/td>' +
+        '\x3ctd class="text-end" style="white-space:nowrap">' +
+        '\x3cbutton class="btn btn-light btn-icon usEdit" data-id="' + SP.esc(u.id) + '">\x3ci class="bi bi-pencil">\x3c/i>\x3c/button> ' +
+        '\x3cbutton class="btn btn-light btn-icon text-danger usDel" data-id="' + SP.esc(u.id) + '">\x3ci class="bi bi-trash">\x3c/i>\x3c/button>\x3c/td>\x3c/tr>';
+    });
+    h += '\x3c/tbody>\x3c/table>\x3c/div>';
+
+    SP.render(SP.card('ผู้ใช้งานระบบ (' + list.length + ')', h,
+      '\x3cbutton class="btn btn-sm btn-primary" id="usAdd">\x3ci class="bi bi-plus-lg">\x3c/i> เพิ่มผู้ใช้\x3c/button>', true));
+
+    function form(u) {
+      u = u || {};
+      SP.ui.openForm({
+        title: u.id ? 'แก้ไขผู้ใช้' : 'เพิ่มผู้ใช้',
+        body: SP.ui.row(
+          SP.ui.field('usUser', 'ชื่อผู้ใช้', u.username, { wrap: 'col-6' }) +
+          SP.ui.field('usName', 'ชื่อ-สกุล', u.name, { wrap: 'col-6' })
+        ) + SP.ui.row(
+          SP.ui.select('usRole', 'สิทธิ์', u.role || 'staff', roleItems, { wrap: 'col-6', blank: false }) +
+          SP.ui.field('usPw', 'รหัสผ่าน', '', {
+            wrap: 'col-6', type: 'password',
+            help: u.id ? 'เว้นว่าง = ไม่เปลี่ยน' : 'อย่างน้อย 6 ตัว'
+          })
+        ) + SP.ui.check('usActive', 'เปิดใช้งาน', u.active !== false),
+        onSave: function () {
+          SP.busy(true);
+          SP.api('apiSaveUser', {
+            id: u.id, username: SP.ui.val('usUser'), name: SP.ui.val('usName'),
+            role: SP.ui.val('usRole'), password: SP.ui.val('usPw'), active: SP.ui.checked('usActive')
+          })
+            .then(function (rr) { SP.toast(rr.message, 'ok'); SP.ui.closeForm(); SP.route(); })
+            .catch(function (e) { SP.toast(e.message, 'bad'); })
+            .then(function () { SP.busy(false); }, function () { SP.busy(false); });
+        }
+      });
+    }
+    $('#usAdd').on('click', function () { form(null); });
+    $('#content').on('click', '.usEdit', function () {
+      form(list.filter(function (x) { return x.id === $(this).data('id'); }.bind(this))[0]);
+    });
+    $('#content').on('click', '.usDel', function () {
+      var id = $(this).data('id');
+      SP.ui.confirm('ลบผู้ใช้นี้?', function () {
+        SP.busy(true);
+        SP.api('apiDeleteUser', id)
+          .then(function (rr) { SP.toast(rr.message, 'ok'); SP.route(); })
+          .catch(function (e) { SP.toast(e.message, 'bad'); })
+          .then(function () { SP.busy(false); }, function () { SP.busy(false); });
+      });
+    });
+  });
+};
+
+/* ============================================================
+   หน้า: ตั้งค่า
+   ============================================================ */
+SP.pages.settings = function () {
+  return SP.api('apiGetSettings').then(function (r) {
+    var s = r.data || {};
+    SP.render(
+      SP.card('ข้อมูลหน่วยงาน',
+        SP.ui.row(
+          SP.ui.field('stOrg', 'ชื่อหน่วยงาน / ร้าน', s.orgName, { wrap: 'col-md-8' }) +
+          '\x3cdiv class="col-md-4 mb-3">\x3clabel class="form-label">โลโก้ (อัปโหลดเข้า Drive)\x3c/label>' +
+          '\x3cinput type="file" id="stLogo" class="form-control" accept="image/*">' +
+          (s.logoUrl ? '\x3cdiv class="t-sub mt-1">มีโลโก้แล้ว\x3c/div>' : '') + '\x3c/div>'
+        )
+      ) +
+      SP.card('กฎการทำงานของสต๊อก',
+        SP.ui.check('stNeg', 'อนุญาตให้เบิกจนยอดติดลบได้ (ปกติควรปิดไว้)', s.allowNegative) +
+        '\x3cdiv class="t-sub mb-3">วิธีคิดต้นทุน: ค่าเฉลี่ยถ่วงน้ำหนัก (Weighted Average) คำนวณใหม่อัตโนมัติทุกครั้งที่รับเข้า\x3c/div>' +
+        SP.ui.row(
+          SP.ui.field('stLW', 'ความกว้างสติกเกอร์ (มม.)', s.labelWidth || 50, { wrap: 'col-md-3', type: 'number' }) +
+          SP.ui.field('stLH', 'ความสูงสติกเกอร์ (มม.)', s.labelHeight || 25, { wrap: 'col-md-3', type: 'number' })
+        )
+      ) +
+      SP.card('การแจ้งเตือนสินค้าใกล้หมด',
+        SP.ui.row(
+          SP.ui.field('stLine', 'LINE Notify Token', s.lineToken, { wrap: 'col-md-6' }) +
+          SP.ui.field('stMail', 'อีเมลรับแจ้งเตือน', s.notifyEmail, { wrap: 'col-md-6' })
+        ) +
+        '\x3cdiv class="t-sub">ตั้ง Trigger รายวันให้เรียกฟังก์ชัน \x3ccode>dailyLowStockReport\x3c/code> เพื่อสรุปของใกล้หมดอัตโนมัติ\x3c/div>'
+      ) +
+      '\x3cdiv class="d-flex justify-content-end">\x3cbutton class="btn btn-primary" id="stSave">บันทึกการตั้งค่า\x3c/button>\x3c/div>'
+    );
+
+    $('#stLogo').on('change', function (e) {
+      var f = e.target.files[0]; if (!f) return;
+      var rd = new FileReader();
+      rd.onload = function (ev) {
+        var b64 = String(ev.target.result).split(',')[1];
+        SP.busy(true);
+        SP.api('apiUploadFile', b64, f.name, f.type)
+          .then(function (rr) { SP._logoUrl = rr.data.url; SP.toast('อัปโหลดโลโก้แล้ว', 'ok'); })
+          .catch(function (er) { SP.toast(er.message, 'bad'); })
+          .then(function () { SP.busy(false); }, function () { SP.busy(false); });
+      };
+      rd.readAsDataURL(f);
+    });
+
+    $('#stSave').on('click', function () {
+      SP.busy(true);
+      SP.api('apiSaveSettings', {
+        orgName: SP.ui.val('stOrg'), logoUrl: SP._logoUrl || s.logoUrl,
+        allowNegative: SP.ui.checked('stNeg'),
+        lineToken: SP.ui.val('stLine'), notifyEmail: SP.ui.val('stMail'),
+        labelWidth: SP.ui.val('stLW'), labelHeight: SP.ui.val('stLH')
+      })
+        .then(function (rr) { SP.toast(rr.message, 'ok'); return SP.api('apiBootstrap'); })
+        .then(function (bb) {
+          SP.boot = bb.data;
+          if (SP.boot.settings.orgName) $('#brandOrg').text(SP.boot.settings.orgName);
+        })
+        .catch(function (e) { SP.toast(e.message, 'bad'); })
+        .then(function () { SP.busy(false); }, function () { SP.busy(false); });
+    });
+  });
+};
+
+/* ============================================================
+   หน้า: ประวัติการใช้งาน
+   ============================================================ */
+SP.pages.logs = function () {
+  return SP.api('apiListLogs', 300).then(function (r) {
+    var rows = r.data || [];
+    var h;
+    if (!rows.length) h = SP.empty('ยังไม่มีประวัติ', 'clock-history');
+    else {
+      h = '\x3cdiv class="table-wrap">\x3ctable class="table-x">\x3cthead>\x3ctr>' +
+        '\x3cth>เวลา\x3c/th>\x3cth>ผู้ใช้\x3c/th>\x3cth>การกระทำ\x3c/th>\x3cth>รายละเอียด\x3c/th>\x3c/tr>\x3c/thead>\x3ctbody>';
+      rows.forEach(function (x) {
+        h += '\x3ctr>\x3ctd class="t-sub">' + SP.dt(x.ts) + '\x3c/td>' +
+          '\x3ctd>' + SP.esc(x.userName) + '\x3c/td>' +
+          '\x3ctd>\x3cspan class="badge-x b-muted">' + SP.esc(x.action) + '\x3c/span>\x3c/td>' +
+          '\x3ctd>' + SP.esc(x.detail) + '\x3c/td>\x3c/tr>';
+      });
+      h += '\x3c/tbody>\x3c/table>\x3c/div>';
+    }
+    SP.render(SP.card('ประวัติการใช้งานล่าสุด', h, '', true));
+  });
+};
+</script>

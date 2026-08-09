@@ -476,10 +476,30 @@ SP.pages.settings = function () {
       ) +
       SP.card('การแจ้งเตือนสินค้าใกล้หมด',
         SP.ui.row(
-          SP.ui.field('stLine', 'LINE Notify Token', s.lineToken, { wrap: 'col-md-6' }) +
+          SP.ui.field('stLine', 'LINE Channel Access Token', s.lineToken, { wrap: 'col-md-6', help: 'จาก LINE Developers Console > Messaging API channel (LINE Notify ปิดบริการถาวรแล้ว)' }) +
           SP.ui.field('stMail', 'อีเมลรับแจ้งเตือน', s.notifyEmail, { wrap: 'col-md-6' })
         ) +
-        '\x3cdiv class="t-sub">ตั้ง Trigger รายวันให้เรียกฟังก์ชัน \x3ccode>dailyLowStockReport\x3c/code> เพื่อสรุปของใกล้หมดอัตโนมัติ\x3c/div>'
+        '\x3cdiv class="t-sub">ระบบจะส่งข้อความ LINE ไปยังผู้ใช้ role ผู้ดูแลระบบ/หัวหน้าคลังที่ผูกบัญชี LINE ไว้แล้ว (ดูหัวข้อ "เชื่อม LINE / มือถือ" ด้านล่าง) · ตั้ง Trigger รายวันให้เรียกฟังก์ชัน \x3ccode>dailyLowStockReport\x3c/code> เพื่อสรุปของใกล้หมดอัตโนมัติ\x3c/div>'
+      ) +
+      SP.card('เชื่อม LINE / มือถือ',
+        '\x3cdiv class="t-sub mb-3">หน้ามือถือถูกโฮสต์แยกบน GitHub Pages เพื่อให้ใช้ตัวสแกนบาร์โค้ดของ LINE ' +
+        'และล็อกอินอัตโนมัติด้วยบัญชี LINE ได้ ดูขั้นตอนติดตั้งในไฟล์ \x3ccode>liff-web/README.md\x3c/code>\x3c/div>' +
+        SP.ui.row(
+          SP.ui.field('stLineChId', 'LINE Login Channel ID', s.lineChannelId, {
+            wrap: 'col-md-6', help: 'จาก LINE Developers Console > LIFF app > Login channel'
+          })
+        ) +
+        '\x3cdiv class="row g-3">' +
+        '\x3cdiv class="col-md-6">\x3cdiv class="stat">\x3cdiv class="stat-label">ขั้นตอนย่อ\x3c/div>' +
+        '\x3cdiv class="t-sub mt-2">1. อัปโหลดโฟลเดอร์ \x3ccode>liff-web\x3c/code> ขึ้น GitHub แล้วเปิด Pages\x3cbr>' +
+        '2. สร้าง LIFF app ชี้ Endpoint ไปที่ URL ของ Pages\x3cbr>' +
+        '3. ใส่ GAS URL + LIFF ID ลงใน \x3ccode>config.js\x3c/code>\x3cbr>' +
+        '4. ใส่ LINE Login Channel ID ในช่องด้านบนแล้วกดบันทึกการตั้งค่า\x3cbr>' +
+        '5. ใส่ LINE Channel Access Token (Messaging API) ในการ์ด "การแจ้งเตือนสินค้าใกล้หมด" ด้านบนเพื่อรับแจ้งเตือนสต๊อก\x3c/div>\x3c/div>\x3c/div>' +
+        '\x3cdiv class="col-md-6">\x3cdiv class="stat">\x3cdiv class="stat-label">การผูกบัญชี LINE ส่วนตัว\x3c/div>' +
+        '\x3cdiv class="t-sub mt-2">พนักงานผูกบัญชีเองได้จากหน้ามือถือ (ล็อกอินด้วยชื่อผู้ใช้/รหัสผ่านครั้งแรกครั้งเดียว) ' +
+        'จัดการการผูกบัญชี LINE ของคุณเองได้จากเมนู \x3ci>โปรไฟล์ผู้ใช้ (มุมขวาบน) > ยกเลิกการผูกบัญชี LINE\x3c/i>\x3c/div>\x3c/div>\x3c/div>' +
+        '\x3c/div>'
       ) +
       '\x3cdiv class="d-flex justify-content-end">\x3cbutton class="btn btn-primary" id="stSave">บันทึกการตั้งค่า\x3c/button>\x3c/div>'
     );
@@ -504,6 +524,7 @@ SP.pages.settings = function () {
         orgName: SP.ui.val('stOrg'), logoUrl: SP._logoUrl || s.logoUrl,
         allowNegative: SP.ui.checked('stNeg'),
         lineToken: SP.ui.val('stLine'), notifyEmail: SP.ui.val('stMail'),
+        lineChannelId: SP.ui.val('stLineChId'),
         labelWidth: SP.ui.val('stLW'), labelHeight: SP.ui.val('stLH')
       })
         .then(function (rr) { SP.toast(rr.message, 'ok'); return SP.api('apiBootstrap'); })

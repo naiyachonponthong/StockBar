@@ -498,6 +498,17 @@ $(function () {
     });
   });
 
+  $('#btnUnlinkLine').on('click', function (e) {
+    e.preventDefault();
+    SP.ui.confirm('ยกเลิกการผูกบัญชี LINE ของคุณ?', function () {
+      SP.busy(true);
+      SP.api('apiUnlinkLine')
+        .then(function (r) { SP.toast(r.message, 'ok'); })
+        .catch(function (e) { SP.toast(e.message, 'bad'); })
+        .then(function () { SP.busy(false); }, function () { SP.busy(false); });
+    });
+  });
+
   $('#btnMenu').on('click', function () {
     $('#sidebar').toggleClass('open');
     $('#sidebarBackdrop').toggleClass('show');

@@ -415,41 +415,4 @@ SP.pages.serials = function () {
   $('#srQ').on('input', drawList);
   return loadList();
 };
-
-/* ============================================================
-   หน้า: เชื่อม LINE / มือถือ
-   ============================================================ */
-SP.pages.mobile = function () {
-  var url = 'https://script.google.com/macros/s/<DEPLOYMENT_ID>/exec';
-  SP.render(
-    SP.card('หน้ามือถือผ่าน LINE (LIFF)',
-      '\x3cdiv class="t-sub mb-3">หน้ามือถือถูกโฮสต์แยกบน GitHub Pages เพื่อให้ใช้ตัวสแกนบาร์โค้ดของ LINE ' +
-      'และล็อกอินอัตโนมัติด้วยบัญชี LINE ได้ ดูขั้นตอนติดตั้งในไฟล์ \x3ccode>liff-web/README.md\x3c/code>\x3c/div>' +
-      '\x3cdiv class="row g-3">' +
-      '\x3cdiv class="col-md-6">\x3cdiv class="stat">\x3cdiv class="stat-label">ขั้นตอนย่อ\x3c/div>' +
-      '\x3cdiv class="t-sub mt-2">1. อัปโหลดโฟลเดอร์ \x3ccode>liff-web\x3c/code> ขึ้น GitHub แล้วเปิด Pages\x3cbr>' +
-      '2. สร้าง LIFF app ชี้ Endpoint ไปที่ URL ของ Pages\x3cbr>' +
-      '3. ใส่ GAS URL + LIFF ID ลงใน \x3ccode>config.js\x3c/code>\x3cbr>' +
-      '4. ใส่ LINE Channel ID ที่ \x3ccode>CONFIG.LINE_CHANNEL_ID\x3c/code> ใน Code.gs\x3c/div>\x3c/div>\x3c/div>' +
-      '\x3cdiv class="col-md-6">\x3cdiv class="stat">\x3cdiv class="stat-label">สถานะบัญชี LINE ของคุณ\x3c/div>' +
-      '\x3cdiv id="mbState" class="mt-2">กำลังตรวจสอบ...\x3c/div>\x3c/div>\x3c/div>' +
-      '\x3c/div>') +
-    SP.card('การผูกบัญชี',
-      '\x3cdiv class="t-sub mb-3">พนักงานผูกบัญชีเองได้จากหน้ามือถือ โดยล็อกอินด้วยชื่อผู้ใช้/รหัสผ่านครั้งแรกครั้งเดียว ' +
-      'หลังจากนั้นเปิดจาก LINE จะเข้าระบบอัตโนมัติ ไม่ต้องพิมพ์รหัสผ่านอีก\x3c/div>' +
-      '\x3cbutton class="btn btn-light" id="mbUnlink">ยกเลิกการผูกบัญชี LINE ของฉัน\x3c/button>')
-  );
-
-  $('#mbState').text(SP.user.name + ' (' + (SP.boot.roles[SP.user.role] || SP.user.role) + ')');
-  $('#mbUnlink').on('click', function () {
-    SP.ui.confirm('ยกเลิกการผูกบัญชี LINE ของคุณ?', function () {
-      SP.busy(true);
-      SP.api('apiUnlinkLine')
-        .then(function (r) { SP.toast(r.message, 'ok'); })
-        .catch(function (e) { SP.toast(e.message, 'bad'); })
-        .then(function () { SP.busy(false); }, function () { SP.busy(false); });
-    });
-  });
-  return Promise.resolve();
-};
 </script>

@@ -12,6 +12,7 @@ var CONFIG = {
   // วางไอดีโฟลเดอร์ Drive สำหรับเก็บรูปสินค้า/โลโก้ (สร้างโฟลเดอร์แล้วคัดลอก ID มาวาง)
   FOLDER_ID: '',
   // LINE Login Channel ID ของ LIFF app (ใช้ตรวจ idToken ตอนล็อกอินอัตโนมัติ)
+  // ปกติตั้งค่าได้จากหน้า "ตั้งค่า" ในแอปเลย ไม่ต้องแก้ตรงนี้ (ใช้ค่านี้เป็น fallback เท่านั้น)
   LINE_CHANNEL_ID: '',
   SESSION_HOURS: 12,
   EXPIRY_WARN_DAYS: 30,
@@ -1604,19 +1605,28 @@ function checkLowStockNotify_(productIds) {
     });
     if (!msgs.length) return;
     var text = 'แจ้งเตือนสินค้าใกล้หมด\n' + msgs.join('\n');
-    if (s.lineToken) sendLine_(s.lineToken, text);
+    if (s.lineToken) sendLineMulticast_(s.lineToken, text);
     if (s.notifyEmail) MailApp.sendEmail(s.notifyEmail, '[' + CONFIG.APP_NAME + '] สินค้าใกล้หมด', text);
   } catch (e) { }
 }
 
-function sendLine_(tokenStr, text) {
+/** ส่งข้อความผ่าน LINE Messaging API (multicast) ไปยังผู้ใช้ role admin/manager
+ *  ที่ผูกบัญชี LINE ไว้แล้ว (Users.lineUid) — แทนที่ LINE Notify ซึ่งปิดบริการถาวรแล้ว */
+function sendLineMulticast_(channelToken, text) {
   try {
-    UrlFetchApp.fetch('https://notify-api.line.me/api/notify', {
-      method: 'post',
-      headers: { Authorization: 'Bearer ' + tokenStr },
-      payload: { message: text },
-      muteHttpExceptions: true
-    });
+    var to = readAll_('Users').filter(function (u) {
+      return u.lineUid && u.active !== false && (u.role === 'admin' || u.role === 'manager');
+    }).map(function (u) { return u.lineUid; });
+    if (!to.length) return;
+    for (var i = 0; i < to.length; i += 500) {
+      UrlFetchApp.fetch('https://api.line.me/v2/bot/message/multicast', {
+        method: 'post',
+        contentType: 'application/json',
+        headers: { Authorization: 'Bearer ' + channelToken },
+        payload: JSON.stringify({ to: to.slice(i, i + 500), messages: [{ type: 'text', text: text }] }),
+        muteHttpExceptions: true
+      });
+    }
   } catch (e) { }
 }
 
@@ -1634,7 +1644,7 @@ function dailyLowStockReport() {
   });
   if (!msgs.length) return;
   var text = 'สรุปสินค้าใกล้หมดประจำวัน (' + msgs.length + ' รายการ)\n' + msgs.slice(0, 40).join('\n');
-  if (s.lineToken) sendLine_(s.lineToken, text);
+  if (s.lineToken) sendLineMulticast_(s.lineToken, text);
   if (s.notifyEmail) MailApp.sendEmail(s.notifyEmail, '[' + CONFIG.APP_NAME + '] สรุปสินค้าใกล้หมด', text);
 }
 
@@ -1703,6 +1713,7 @@ function apiSaveSettings(token, d) {
       orgName: d.orgName || '', logoUrl: d.logoUrl || '',
       allowNegative: !!d.allowNegative,
       lineToken: d.lineToken || '', notifyEmail: d.notifyEmail || '',
+      lineChannelId: d.lineChannelId || '',
       labelWidth: num_(d.labelWidth) || 50, labelHeight: num_(d.labelHeight) || 25
     });
     log_(u.id, 'settings', 'แก้ไขการตั้งค่า');
@@ -2175,12 +2186,15 @@ function doPost(e) {
 
 /* ---------- LINE account linking ---------- */
 
-/** ตรวจ idToken จาก liff.getIDToken() กับเซิร์ฟเวอร์ LINE แล้วคืน sub (lineUid) */
+/** ตรวจ idToken จาก liff.getIDToken() กับเซิร์ฟเวอร์ LINE แล้วคืน sub (lineUid)
+ *  Channel ID อ่านจากหน้าตั้งค่า (Settings.lineChannelId) ก่อน ถ้าไม่มีจะ fallback ไปที่ CONFIG.LINE_CHANNEL_ID */
 function verifyLineIdToken_(idToken) {
-  if (!CONFIG.LINE_CHANNEL_ID) throw new Error('ยังไม่ได้ตั้งค่า LINE_CHANNEL_ID ใน Code.gs');
+  var s = readAll_('Settings')[0] || {};
+  var channelId = s.lineChannelId || CONFIG.LINE_CHANNEL_ID;
+  if (!channelId) throw new Error('ยังไม่ได้ตั้งค่า LINE Login Channel ID ในหน้าตั้งค่า');
   var res = UrlFetchApp.fetch('https://api.line.me/oauth2/v2.1/verify', {
     method: 'post',
-    payload: { id_token: idToken, client_id: CONFIG.LINE_CHANNEL_ID },
+    payload: { id_token: idToken, client_id: channelId },
     muteHttpExceptions: true
   });
   var data = JSON.parse(res.getContentText());

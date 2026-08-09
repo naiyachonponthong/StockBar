@@ -112,7 +112,6 @@ SP.serialForm = function (it, cfg, onDone) {
       '\x3cdiv class="scan-hint">' +
       (isOut ? 'ระบบจะตรวจว่าซีเรียลนี้อยู่ในสต๊อกจริงตอนบันทึกเอกสาร' : 'ซีเรียลห้ามซ้ำกับที่อยู่ในสต๊อกอยู่แล้ว') +
       '\x3c/div>' +
-      '\x3cdiv class="scan-modes">\x3cbutton data-m="cam">\x3ci class="bi bi-camera">\x3c/i> กล้อง\x3c/button>\x3c/div>' +
       '\x3c/div>' +
       '\x3cdiv class="t-sub mb-2">เพิ่มแล้ว \x3cb id="sfCount">0\x3c/b> ชิ้น (จำนวนในเอกสารจะเท่ากับจำนวนซีเรียล)\x3c/div>' +
       '\x3cdiv id="sfList">\x3c/div>',
@@ -136,12 +135,6 @@ SP.serialForm = function (it, cfg, onDone) {
       }).focus();
       $('#spModalBody').on('click', '.sfDel', function () {
         it.serials.splice($(this).data('i'), 1); refresh();
-      });
-      $('#spModalBody').on('click', '[data-m="cam"]', function () {
-        SP.scan.camera(function (code) {
-          addSerial(code);
-          setTimeout(function () { SP.serialForm(it, cfg, onDone); }, 300);
-        });
       });
     },
     onSave: function () {
@@ -431,12 +424,7 @@ SP.buildTxn = function (cfg) {
   }
 
   SP.scan.attach('#txScan', onHit, onMiss);
-  SP.scan.bindModes('txScan', function () {
-    SP.scan.camera(function (code) {
-      var hit = SP.scan.lookup(code);
-      if (hit) { SP.beep('ok'); onHit(hit, code); } else { SP.beep('bad'); onMiss(code); }
-    });
-  });
+  SP.scan.bindModes('txScan');
 
   /* ---- events ---- */
   $('#content').on('input', '.txQty', function () {

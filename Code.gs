@@ -9,7 +9,8 @@
 var CONFIG = {
   APP_NAME: 'StockBar',
   APP_SUB: 'ระบบสต๊อกสินค้า',
-  // วางไอดีโฟลเดอร์ Drive สำหรับเก็บรูปสินค้า/โลโก้ (สร้างโฟลเดอร์แล้วคัดลอก ID มาวาง)
+  // ไอดีโฟลเดอร์ Drive สำหรับเก็บรูปสินค้า/โลโก้
+  // ปกติตั้งค่าได้จากหน้า "ตั้งค่า" ในแอปเลย ไม่ต้องแก้ตรงนี้ (ใช้ค่านี้เป็น fallback เท่านั้น)
   FOLDER_ID: '',
   // LINE Login Channel ID ของ LIFF app (ใช้ตรวจ idToken ตอนล็อกอินอัตโนมัติ)
   // ปกติตั้งค่าได้จากหน้า "ตั้งค่า" ในแอปเลย ไม่ต้องแก้ตรงนี้ (ใช้ค่านี้เป็น fallback เท่านั้น)
@@ -1440,6 +1441,47 @@ function apiDashboard(token) {
       return { date: d, inQty: daily[d].inQty, outQty: daily[d].outQty };
     });
 
+    // สินค้าเคลื่อนไหวมากสุดใน 14 วัน
+    var moverMap = {};
+    mv.forEach(function (m) {
+      var mm = moverMap[m.productId] || (moverMap[m.productId] = { inQty: 0, outQty: 0 });
+      if (num_(m.qty) > 0) mm.inQty += num_(m.qty); else mm.outQty += -num_(m.qty);
+    });
+    var topMovers = Object.keys(moverMap).map(function (pid) {
+      var p = pm[pid]; var mm = moverMap[pid];
+      return {
+        name: p ? p.name : '-', code: p ? p.code : '', unit: p ? p.unit : '',
+        inQty: mm.inQty, outQty: mm.outQty, total: mm.inQty + mm.outQty
+      };
+    }).sort(function (a, b) { return b.total - a.total; }).slice(0, 6);
+
+    // มูลค่าคงคลังแยกตามหมวดหมู่
+    var catMap = {}; readAll_('Categories').forEach(function (c) { catMap[c.id] = c.name; });
+    var byCat = {};
+    prods.forEach(function (p) {
+      var q = byProd[p.id] || 0; if (q <= 0) return;
+      var cn = catMap[p.categoryId] || 'ไม่ระบุหมวด';
+      byCat[cn] = (byCat[cn] || 0) + q * num_(p.avgCost);
+    });
+    var byCategory = Object.keys(byCat).map(function (n) { return { name: n, value: byCat[n] }; })
+      .sort(function (a, b) { return b.value - a.value; });
+    if (byCategory.length > 6) {
+      var rest = byCategory.slice(6).reduce(function (s, x) { return s + x.value; }, 0);
+      byCategory = byCategory.slice(0, 6).concat([{ name: 'อื่นๆ', value: rest }]);
+    }
+
+    // ใบสั่งซื้อค้างรับ
+    var poPending = readAll_('DocPO').filter(function (x) { return x.status === 'open' || x.status === 'partial'; }).length;
+
+    // ล็อตใกล้หมดอายุ/หมดอายุแล้ว
+    var warnDays = CONFIG.EXPIRY_WARN_DAYS, expiredCount = 0, soonCount = 0;
+    readAll_('Lots').forEach(function (l) {
+      if (num_(l.qty) <= 0 || !l.expiryDate) return;
+      var dd = daysUntil_(l.expiryDate);
+      if (dd === null) return;
+      if (dd < 0) expiredCount++; else if (dd <= warnDays) soonCount++;
+    });
+
     var recent = readAll_('Movements').filter(function (m) { return !m.void; })
       .sort(function (a, b) { return String(b.ts).localeCompare(String(a.ts)); })
       .slice(0, 15)
@@ -1459,7 +1501,12 @@ function apiDashboard(token) {
       zeroCount: zero,
       low: low.slice(0, 20),
       series: series,
-      recent: recent
+      recent: recent,
+      topMovers: topMovers,
+      byCategory: byCategory,
+      poPending: poPending,
+      expiredCount: expiredCount,
+      soonCount: soonCount
     });
   } catch (e) { return err_(e.message); }
 }
@@ -1704,6 +1751,15 @@ function apiGetSettings(token) {
   catch (e) { return err_(e.message); }
 }
 
+/** ชื่อหน่วยงาน/โลโก้แบบไม่ต้องล็อกอิน — ใช้แสดงบนหน้า login ก่อนรู้ token
+ *  ตั้งใจคืนแค่ 2 ฟิลด์นี้เท่านั้น ไม่ให้หลุดค่าที่อ่อนไหวอื่นๆ ใน Settings ออกไปก่อนล็อกอิน */
+function apiPublicBranding() {
+  try {
+    var s = readAll_('Settings')[0] || {};
+    return ok_('ok', { orgName: s.orgName || '', logoUrl: s.logoUrl || '' });
+  } catch (e) { return err_(e.message); }
+}
+
 function apiSaveSettings(token, d) {
   try {
     var u = auth_(token, ['admin', 'manager']);
@@ -1713,7 +1769,7 @@ function apiSaveSettings(token, d) {
       orgName: d.orgName || '', logoUrl: d.logoUrl || '',
       allowNegative: !!d.allowNegative,
       lineToken: d.lineToken || '', notifyEmail: d.notifyEmail || '',
-      lineChannelId: d.lineChannelId || '',
+      lineChannelId: d.lineChannelId || '', folderId: d.folderId || '',
       labelWidth: num_(d.labelWidth) || 50, labelHeight: num_(d.labelHeight) || 25
     });
     log_(u.id, 'settings', 'แก้ไขการตั้งค่า');
@@ -1721,17 +1777,22 @@ function apiSaveSettings(token, d) {
   } catch (e) { return err_(e.message); }
 }
 
-/** อัปโหลดไฟล์เข้า Drive (รูปสินค้า/โลโก้) — ส่ง base64 มาจากฝั่งเว็บ */
+/** อัปโหลดไฟล์เข้า Drive (รูปสินค้า/โลโก้) — ส่ง base64 มาจากฝั่งเว็บ
+ *  Folder ID อ่านจากหน้าตั้งค่า (Settings.folderId) ก่อน ถ้าไม่มีจะ fallback ไปที่ CONFIG.FOLDER_ID */
 function apiUploadFile(token, base64, filename, mime) {
   try {
     auth_(token);
-    if (!CONFIG.FOLDER_ID) return err_('ยังไม่ได้ตั้งค่า FOLDER_ID ใน Code.gs');
+    var s = readAll_('Settings')[0] || {};
+    var folderId = s.folderId || CONFIG.FOLDER_ID;
+    if (!folderId) return err_('ยังไม่ได้ตั้งค่า Drive Folder ID ในหน้าตั้งค่า');
     var bytes = Utilities.base64Decode(base64);
     var blob = Utilities.newBlob(bytes, mime, filename);
-    var folder = DriveApp.getFolderById(CONFIG.FOLDER_ID);
+    var folder = DriveApp.getFolderById(folderId);
     var f = folder.createFile(blob);
     f.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-    return ok_('อัปโหลดแล้ว', { url: 'https://drive.google.com/uc?export=view&id=' + f.getId(), id: f.getId() });
+    // ใช้ endpoint thumbnail แทน uc?export=view — ฝังเป็น <img> ในหน้าที่รันอยู่ใน iframe ของ Apps Script ได้จริง
+    // (uc?export=view เปิดตรงในแท็บได้ปกติ แต่มักโดนบล็อกเมื่อฝังเป็น <img> ข้ามโดเมนจาก iframe แบบ sandbox)
+    return ok_('อัปโหลดแล้ว', { url: 'https://drive.google.com/thumbnail?id=' + f.getId() + '&sz=w1000', id: f.getId() });
   } catch (e) { return err_(e.message); }
 }
 
@@ -2133,7 +2194,7 @@ function dailyExpiryReport() {
 /** เฉพาะฟังก์ชันในลิสต์นี้เท่านั้นที่เรียกผ่าน gateway ได้ */
 var API_WHITELIST = {
   apiLogin: 1, apiLineLogin: 1, apiLinkLine: 1, apiUnlinkLine: 1,
-  apiBootstrap: 1, apiMe: 1, apiLogout: 1,
+  apiBootstrap: 1, apiMe: 1, apiLogout: 1, apiPublicBranding: 1,
   apiScanIndex: 1, apiProductSnapshot: 1, apiLookupSerial: 1,
   apiMobileSummary: 1, apiDashboard: 1,
   apiCreateStockIn: 1, apiCreateStockOut: 1, apiCreateTransfer: 1,

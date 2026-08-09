@@ -407,12 +407,256 @@ SP.pages.serials = function () {
     $(this).val('');
     if (v) lookup(v);
   });
-  SP.scan.bindModes('srScan', function () {
-    SP.scan.camera(function (code) { lookup(code); });
-  });
+  SP.scan.bindModes('srScan');
   setTimeout(function () { $('#srScan').focus(); }, 150);
   $('#srStatus').on('change', loadList);
   $('#srQ').on('input', drawList);
   return loadList();
+};
+
+/* ============================================================
+   หน้า: คู่มือการใช้งาน
+   ============================================================ */
+SP.pages.manual = function () {
+  function box(icon, title, bodyHtml) {
+    return '\x3cdiv class="col-md-6">\x3cdiv class="manual-box">' +
+      '\x3cdiv class="fw-bold">\x3ci class="bi ' + icon + ' text-primary me-1">\x3c/i>' + title + '\x3c/div>' +
+      bodyHtml + '\x3c/div>\x3c/div>';
+  }
+  function step(n, title, desc) {
+    return '\x3cdiv class="step-row">\x3cspan class="step-badge">' + n + '\x3c/span>\x3cdiv>' +
+      '\x3cdiv class="fw-bold" style="font-size:13.3px">' + title + '\x3c/div>' +
+      (desc ? '\x3cdiv class="t-sub">' + desc + '\x3c/div>' : '') + '\x3c/div>\x3c/div>';
+  }
+  function tip(html) { return '\x3cdiv class="tip-box">\x3ci class="bi bi-lightbulb">\x3c/i> ' + html + '\x3c/div>'; }
+  function warn(html) { return '\x3cdiv class="warn-box">\x3ci class="bi bi-exclamation-triangle">\x3c/i> ' + html + '\x3c/div>'; }
+  function danger(html) { return '\x3cdiv class="danger-box">\x3ci class="bi bi-x-octagon">\x3c/i> ' + html + '\x3c/div>'; }
+  function section(id, icon, title, bodyHtml) {
+    return '\x3cdiv class="manual-card card-x" id="' + id + '">' +
+      '\x3cdiv class="card-x-head">\x3ch6>\x3ci class="bi ' + icon + ' me-1">\x3c/i>' + title + '\x3c/h6>\x3c/div>' +
+      '\x3cdiv class="card-x-body">' + bodyHtml + '\x3c/div>\x3c/div>';
+  }
+
+  var toc = [
+    ['mnl-overview', 'bi-info-circle', 'ภาพรวมระบบ'],
+    ['mnl-login', 'bi-box-arrow-in-right', 'การเข้าสู่ระบบ'],
+    ['mnl-roles', 'bi-people', 'บทบาทผู้ใช้'],
+    ['mnl-dashboard', 'bi-speedometer2', 'แดชบอร์ด'],
+    ['mnl-scan', 'bi-upc-scan', 'การยิงบาร์โค้ด'],
+    ['mnl-stock', 'bi-box-seam', 'งานสต๊อก'],
+    ['mnl-po', 'bi-cart-check', 'ใบสั่งซื้อ (PO)'],
+    ['mnl-master', 'bi-database', 'ข้อมูลหลัก'],
+    ['mnl-reports', 'bi-graph-up', 'รายงาน'],
+    ['mnl-system', 'bi-gear', 'ระบบ'],
+    ['mnl-mobile', 'bi-phone', 'มือถือ / LINE'],
+    ['mnl-faq', 'bi-question-circle', 'คำถามที่พบบ่อย']
+  ];
+  function tocLinks() {
+    return toc.map(function (t) {
+      return '\x3ca class="nav-link" data-goto="' + t[0] + '">\x3ci class="bi ' + t[1] + '">\x3c/i>' + t[2] + '\x3c/a>';
+    }).join('');
+  }
+
+  var html = '\x3cdiv class="row g-3">' +
+    '\x3cdiv class="col-lg-3 d-none d-lg-block">\x3cdiv class="manual-toc">' +
+    '\x3cdiv class="card-x">\x3cdiv class="card-x-head">\x3ch6>\x3ci class="bi bi-list-ul me-1">\x3c/i>สารบัญ\x3c/h6>\x3c/div>' +
+    '\x3cdiv class="card-x-body tight">\x3cnav class="nav flex-column manual-nav gap-1 p-2" id="mnlNav">' +
+    tocLinks() + '\x3c/nav>\x3c/div>\x3c/div>\x3c/div>\x3c/div>' +
+
+    '\x3cdiv class="col-lg-9">' +
+
+    '\x3cdiv class="d-lg-none mb-3">' +
+    '\x3cbutton class="btn btn-outline-primary w-100" data-bs-toggle="collapse" data-bs-target="#mnlMobileToc">' +
+    '\x3ci class="bi bi-list-ul me-1">\x3c/i>สารบัญ\x3c/button>' +
+    '\x3cdiv class="collapse mt-2" id="mnlMobileToc">\x3cdiv class="card-x">\x3cdiv class="card-x-body tight">' +
+    '\x3cnav class="nav flex-column manual-nav gap-1 p-2">' + tocLinks() + '\x3c/nav>' +
+    '\x3c/div>\x3c/div>\x3c/div>\x3c/div>' +
+
+    /* ---------- 1. ภาพรวม ---------- */
+    section('mnl-overview', 'bi-info-circle', '1. ภาพรวมระบบ StockBar',
+      '\x3cp class="mb-3">StockBar เป็นระบบสต๊อกสินค้าที่ทำงานบน Google Sheets ผ่าน Google Apps Script ' +
+      'ออกแบบมาให้ใช้กับ \x3cb>เครื่องยิงบาร์โค้ด\x3c/b> เป็นหลัก ตั้งแต่รับเข้า เบิกจ่าย โอนย้าย ตรวจนับ ไปจนถึงพิมพ์สติกเกอร์บาร์โค้ด\x3c/p>' +
+      '\x3cdiv class="row g-2 mb-3">' +
+      box('bi-upc-scan', 'ยิงแล้วบันทึกทันที', '\x3cdiv class="t-sub">ไม่ต้องพิมพ์ค้นหาสินค้าเอง ยิงบาร์โค้ดแล้วระบบเพิ่มรายการให้อัตโนมัติ\x3c/div>') +
+      box('bi-graph-up', 'คำนวณต้นทุนอัตโนมัติ', '\x3cdiv class="t-sub">ต้นทุนเฉลี่ยถ่วงน้ำหนัก (Weighted Average) คำนวณใหม่ทุกครั้งที่รับเข้า\x3c/div>') +
+      box('bi-phone', 'เชื่อม LINE ได้', '\x3cdiv class="t-sub">มีหน้ามือถือแยก (LIFF) ให้ล็อกอินและยิงบาร์โค้ดผ่าน LINE ได้\x3c/div>') +
+      box('bi-bell', 'แจ้งเตือนของใกล้หมด', '\x3cdiv class="t-sub">แจ้งผ่าน LINE (Messaging API) และอีเมลอัตโนมัติเมื่อของต่ำกว่าขั้นต่ำ\x3c/div>') +
+      '\x3c/div>' +
+      tip('เมนูทั้งหมดอยู่ทางซ้าย จัดกลุ่มเป็น ภาพรวม / งานสต๊อก / จัดซื้อ / ข้อมูลหลัก / รายงาน / ระบบ')
+    ) +
+
+    /* ---------- 2. login ---------- */
+    section('mnl-login', 'bi-box-arrow-in-right', '2. การเข้าสู่ระบบ',
+      step(1, 'เปิดลิงก์ระบบ', 'จะพบหน้าล็อกอินก่อนเสมอ') +
+      step(2, 'กรอกชื่อผู้ใช้และรหัสผ่าน', 'ค่าเริ่มต้นของผู้ดูแลระบบคือ \x3cb>admin / admin1234\x3c/b> — ควรเปลี่ยนรหัสผ่านทันทีหลังใช้งานจริง') +
+      step(3, 'เข้าสู่ระบบ', 'ระบบจะจำการล็อกอินไว้ในเครื่อง (localStorage) ครั้งต่อไปเปิดมาจะเข้าอัตโนมัติจนกว่าจะกดออกจากระบบ') +
+      '\x3cdiv class="row g-2 mt-1">' +
+      box('bi-key', 'เปลี่ยนรหัสผ่าน', '\x3cdiv class="t-sub">คลิกชื่อผู้ใช้มุมขวาบน → เปลี่ยนรหัสผ่าน\x3c/div>') +
+      box('bi-box-arrow-right', 'ออกจากระบบ', '\x3cdiv class="t-sub">คลิกชื่อผู้ใช้มุมขวาบน → ออกจากระบบ\x3c/div>') +
+      '\x3c/div>' +
+      tip('ล็อกอินผ่านบัญชี LINE ได้เช่นกัน ถ้าผูกบัญชีไว้แล้ว — ดูหัวข้อ "มือถือ / LINE" ด้านล่าง')
+    ) +
+
+    /* ---------- 3. roles ---------- */
+    section('mnl-roles', 'bi-people', '3. บทบาทผู้ใช้ (Roles)',
+      '\x3cdiv class="table-wrap">\x3ctable class="table-x">\x3cthead>\x3ctr>' +
+      '\x3cth>บทบาท\x3c/th>\x3cth>ใช้งานได้\x3c/th>\x3c/tr>\x3c/thead>\x3ctbody>' +
+      '\x3ctr>\x3ctd>\x3cspan class="badge-x b-out">ผู้ดูแลระบบ (admin)\x3c/span>\x3c/td>' +
+      '\x3ctd>ทุกเมนู รวมถึงจัดการผู้ใช้งาน, ปรับปรุงยอด, ดูประวัติการใช้งาน\x3c/td>\x3c/tr>' +
+      '\x3ctr>\x3ctd>\x3cspan class="badge-x b-ct">หัวหน้าคลัง (manager)\x3c/span>\x3c/td>' +
+      '\x3ctd>งานสต๊อกทั้งหมด, ปรับปรุงยอด, ตั้งค่าระบบ (ยกเว้นจัดการผู้ใช้งาน)\x3c/td>\x3c/tr>' +
+      '\x3ctr>\x3ctd>\x3cspan class="badge-x b-tr">เจ้าหน้าที่สต๊อก (staff)\x3c/span>\x3c/td>' +
+      '\x3ctd>รับเข้า/เบิกจ่าย/โอนย้าย/ตรวจนับ/PO/ข้อมูลหลัก — ปรับปรุงยอดและตั้งค่าไม่ได้\x3c/td>\x3c/tr>' +
+      '\x3ctr>\x3ctd>\x3cspan class="badge-x b-muted">ดูอย่างเดียว (viewer)\x3c/span>\x3c/td>' +
+      '\x3ctd>ดูข้อมูล/รายงานได้ทุกหน้า แต่บันทึกหรือแก้ไขอะไรไม่ได้\x3c/td>\x3c/tr>' +
+      '\x3c/tbody>\x3c/table>\x3c/div>' +
+      tip('เมนูที่บทบาทนั้นไม่มีสิทธิ์จะถูกซ่อนออกจากแถบด้านข้างให้อัตโนมัติ')
+    ) +
+
+    /* ---------- 4. dashboard ---------- */
+    section('mnl-dashboard', 'bi-speedometer2', '4. แดชบอร์ด',
+      '\x3cp class="t-sub mb-3">หน้าแรกหลังล็อกอิน สรุปภาพรวมสต๊อกทั้งหมด\x3c/p>' +
+      '\x3cdiv class="row g-2">' +
+      box('bi-cash-stack', 'การ์ดสรุปด้านบน', '\x3cdiv class="t-sub">มูลค่าคงคลัง, จำนวนสินค้า, ต่ำกว่าขั้นต่ำ, ใกล้/หมดอายุ, PO ค้างรับ — คลิกที่การ์ดเพื่อไปหน้านั้นได้เลย\x3c/div>') +
+      box('bi-bar-chart', 'กราฟเข้า-ออก 14 วัน', '\x3cdiv class="t-sub">เทียบยอดรับเข้า/จ่ายออกรายวันย้อนหลัง 2 สัปดาห์\x3c/div>') +
+      box('bi-pie-chart', 'มูลค่าตามหมวดหมู่', '\x3cdiv class="t-sub">สัดส่วนมูลค่าคงคลังแยกตามหมวดสินค้า\x3c/div>') +
+      box('bi-graph-up-arrow', 'สินค้าเคลื่อนไหวมากสุด', '\x3cdiv class="t-sub">Top สินค้าที่มีการรับเข้า/จ่ายออกเยอะสุดใน 14 วัน\x3c/div>') +
+      '\x3c/div>'
+    ) +
+
+    /* ---------- 5. scan ---------- */
+    section('mnl-scan', 'bi-upc-scan', '5. การยิงบาร์โค้ด',
+      '\x3cp class="t-sub mb-2">ทุกหน้าธุรกรรม (รับเข้า/เบิกจ่าย/โอนย้าย/ตรวจนับ/ปรับปรุงยอด) มีแผงยิงบาร์โค้ดแบบเดียวกัน ' +
+      'ช่องรับบาร์โค้ดจะโฟกัสค้างไว้ตลอดโดยไม่ต้องคลิก ยิงแล้วกด Enter (เครื่องยิงส่วนใหญ่ Enter มาให้อัตโนมัติ)\x3c/p>' +
+      '\x3cdiv class="row g-2">' +
+      box('bi-lightning-charge', 'ยิงรัว +1', '\x3cdiv class="t-sub">โหมดเริ่มต้น ยิงซ้ำสินค้าเดิมจำนวนจะบวกเพิ่มทีละ 1 อัตโนมัติ เหมาะกับของทีละชิ้น\x3c/div>') +
+      box('bi-123', 'ยิงแล้วใส่จำนวน', '\x3cdiv class="t-sub">ยิงแล้วเด้งช่องกรอกจำนวนทุกครั้ง เหมาะกับของที่นับเป็นแพ็ค/ลัง\x3c/div>') +
+      box('bi-search', 'เช็คข้อมูล', '\x3cdiv class="t-sub">ยิงเพื่อดูราคา/ยอดคงเหลือทุกคลังเฉยๆ ไม่เพิ่มลงรายการ\x3c/div>') +
+      box('bi-plus-circle', 'ยิงไม่พบสินค้า', '\x3cdiv class="t-sub">หน้ารับเข้า/ปรับปรุงยอด ระบบเปิดฟอร์มสร้างสินค้าใหม่ให้ทันทีพร้อมบาร์โค้ดที่ยิง\x3c/div>') +
+      '\x3c/div>' +
+      warn('การสแกนด้วย \x3cb>กล้องมือถือ\x3c/b> ใช้ในหน้าเว็บนี้ไม่ได้ เพราะ Google Apps Script บล็อกการเข้าถึงกล้องในหน้าที่รันอยู่ใน iframe ของตัวเอง — ถ้าต้องการสแกนด้วยกล้อง ให้ใช้ \x3cb>หน้ามือถือ (LIFF)\x3c/b> แทน ดูหัวข้อ "มือถือ / LINE"')
+    ) +
+
+    /* ---------- 6. stock ops ---------- */
+    section('mnl-stock', 'bi-box-seam', '6. งานสต๊อก',
+      '\x3cdiv class="row g-2 mb-2">' +
+      box('bi-box-arrow-in-down', 'รับเข้า', '\x3cdiv class="t-sub">ยิงบาร์โค้ด ใส่ต้นทุน แล้วบันทึก ระบบคำนวณต้นทุนเฉลี่ยใหม่ให้อัตโนมัติ\x3c/div>') +
+      box('bi-box-arrow-up', 'เบิก-จ่ายออก', '\x3cdiv class="t-sub">เตือนถ้ายอดคงเหลือไม่พอ (ปิดกั้นไม่ให้ติดลบ เว้นแต่เปิดไว้ในตั้งค่า)\x3c/div>') +
+      box('bi-arrow-left-right', 'โอนย้ายคลัง', '\x3cdiv class="t-sub">ตัดจากคลังต้นทาง เพิ่มเข้าคลังปลายทางในครั้งเดียว\x3c/div>') +
+      box('bi-clipboard-check', 'ตรวจนับสต๊อก', '\x3cdiv class="t-sub">ยิงสะสมยอดนับจริง ระบบเทียบกับยอดในระบบและปรับส่วนต่างอัตโนมัติเมื่อบันทึก\x3c/div>') +
+      box('bi-sliders', 'ปรับปรุงยอด', '\x3cdiv class="t-sub">ใส่จำนวนบวกเพื่อเพิ่ม ลบเพื่อลด เช่น ของเสีย -2 (admin/manager เท่านั้น)\x3c/div>') +
+      box('bi-journals', 'เอกสารทั้งหมด', '\x3cdiv class="t-sub">ดูย้อนหลังทุกใบ (รับเข้า/เบิกจ่าย/โอนย้าย/ตรวจนับ/ปรับปรุงยอด) ยกเลิกใบและคืนยอดได้ (admin/manager)\x3c/div>') +
+      '\x3c/div>' +
+      danger('ยกเลิกเอกสาร (ปุ่ม \x3ci class="bi bi-x-octagon">\x3c/i>) จะคืนยอดสต๊อกให้อัตโนมัติ แต่ทำย้อนกลับไม่ได้ ควรตรวจสอบให้แน่ใจก่อนกด')
+    ) +
+
+    /* ---------- 7. po ---------- */
+    section('mnl-po', 'bi-cart-check', '7. ใบสั่งซื้อ (PO)',
+      step(1, 'เปิดใบสั่งซื้อ', 'เลือกผู้จำหน่าย + คลังที่จะรับของ → เลือกสินค้าและจำนวนที่สั่งลงตะกร้า → บันทึก') +
+      step(2, 'รับของตาม PO', 'จากรายการ PO กดปุ่ม \x3ci class="bi bi-box-arrow-in-down">\x3c/i> เพื่อไปหน้ารับเข้าพร้อมดึงรายการจาก PO มาให้') +
+      step(3, 'ติดตามสถานะ', 'เปิดอยู่ → รับบางส่วน → รับครบแล้ว ปรับตามจำนวนที่รับเข้าจริงเทียบกับที่สั่ง') +
+      tip('ยกเลิก PO ได้จากปุ่ม \x3ci class="bi bi-x-octagon">\x3c/i> เฉพาะที่ยังไม่รับครบ (admin/manager เท่านั้น)')
+    ) +
+
+    /* ---------- 8. master data ---------- */
+    section('mnl-master', 'bi-database', '8. ข้อมูลหลัก',
+      '\x3cdiv class="row g-2">' +
+      box('bi-boxes', 'สินค้า', '\x3cdiv class="t-sub">เพิ่ม/แก้ไขสินค้า ตั้งสต๊อกขั้นต่ำ-สูงสุด ติดตามล็อต/ซีเรียลได้ และ\x3cb>แนบรูปสินค้า\x3c/b>ได้ (ต้องตั้ง Drive Folder ID ในตั้งค่าก่อน)\x3c/div>') +
+      box('bi-upc', 'บาร์โค้ด', '\x3cdiv class="t-sub">1 สินค้ามีได้หลายบาร์โค้ด เช่น ชิ้น/แพ็ค/ลัง แต่ละบาร์โค้ดกำหนดจำนวนต่อหน่วยได้\x3c/div>') +
+      box('bi-tags', 'พิมพ์สติกเกอร์', '\x3cdiv class="t-sub">เลือกสินค้าได้หลายรายการพร้อมกัน ตั้งจำนวนดวงต่อรายการ พิมพ์ออกมาจะมีแค่บาร์โค้ด ไม่มีชื่อสินค้า\x3c/div>') +
+      box('bi-box-seam', 'ล็อต / วันหมดอายุ', '\x3cdiv class="t-sub">ดูล็อตคงเหลือ ระบบตัดสต๊อกแบบ FEFO (ล็อตหมดอายุก่อนตัดก่อน) ให้อัตโนมัติ\x3c/div>') +
+      box('bi-123', 'ซีเรียลรายชิ้น', '\x3cdiv class="t-sub">สินค้าที่ติดตามซีเรียล ยิงทีละชิ้นตอนรับเข้า/เบิกออกได้\x3c/div>') +
+      box('bi-diagram-3', 'หมวด / คลัง / ผู้จำหน่าย', '\x3cdiv class="t-sub">ข้อมูลอ้างอิงพื้นฐานที่ใช้ทั่วทั้งระบบ\x3c/div>') +
+      '\x3c/div>'
+    ) +
+
+    /* ---------- 9. reports ---------- */
+    section('mnl-reports', 'bi-graph-up', '9. รายงาน',
+      '\x3cdiv class="row g-2">' +
+      box('bi-list-columns-reverse', 'ยอดคงเหลือ', '\x3cdiv class="t-sub">ยอดคงเหลือแยกตามคลัง กรองต่ำกว่าขั้นต่ำ/มีของได้ ส่งออก CSV ได้\x3c/div>') +
+      box('bi-card-list', 'การ์ดสินค้า', '\x3cdiv class="t-sub">ประวัติเคลื่อนไหวรายสินค้าพร้อมยอดคงเหลือสะสม พิมพ์ออกกระดาษได้ (พิมพ์เฉพาะข้อมูล ไม่ติดฟอร์มค้นหา)\x3c/div>') +
+      box('bi-hourglass-split', 'ใกล้หมดอายุ', '\x3cdiv class="t-sub">รายการล็อตที่ใกล้/หมดอายุแล้ว ตามจำนวนวันที่ตั้งไว้ในตั้งค่า\x3c/div>') +
+      box('bi-graph-up', 'รายงานรวม', '\x3cdiv class="t-sub">3 แท็บ — รายงานเข้า-ออก, มูลค่าสินค้าคงคลัง, สินค้าไม่เคลื่อนไหว\x3c/div>') +
+      '\x3c/div>'
+    ) +
+
+    /* ---------- 10. system ---------- */
+    section('mnl-system', 'bi-gear', '10. ระบบ',
+      '\x3cdiv class="row g-2">' +
+      box('bi-people', 'ผู้ใช้งาน', '\x3cdiv class="t-sub">เพิ่ม/แก้ไข/ปิดใช้งานผู้ใช้ กำหนดบทบาท (admin เท่านั้น)\x3c/div>') +
+      box('bi-gear', 'ตั้งค่า', '\x3cdiv class="t-sub">ข้อมูลหน่วยงาน/โลโก้, Drive Folder ID (สำหรับรูปสินค้า/โลโก้), กฎสต๊อก, ขนาดสติกเกอร์, การแจ้งเตือนสินค้าใกล้หมด (LINE + อีเมล), เชื่อม LINE/มือถือ (admin/manager)\x3c/div>') +
+      box('bi-clock-history', 'ประวัติการใช้งาน', '\x3cdiv class="t-sub">Log ทุกการกระทำสำคัญในระบบ (admin เท่านั้น)\x3c/div>') +
+      '\x3c/div>' +
+      tip('การแจ้งเตือนสินค้าใกล้หมดใช้ \x3cb>LINE Messaging API\x3c/b> (LINE Notify ปิดบริการถาวรแล้ว) ส่งถึงผู้ใช้ role ผู้ดูแลระบบ/หัวหน้าคลังที่ผูกบัญชี LINE ไว้เท่านั้น')
+    ) +
+
+    /* ---------- 11. mobile/line ---------- */
+    section('mnl-mobile', 'bi-phone', '11. มือถือ / LINE',
+      '\x3cp class="t-sub mb-2">หน้ามือถือ (LIFF) เป็นเว็บแยกต่างหาก โฮสต์บน GitHub Pages เพื่อให้ใช้ \x3cb>สแกนเนอร์กล้องของ LINE\x3c/b> ' +
+      'และ \x3cb>ล็อกอินอัตโนมัติด้วยบัญชี LINE\x3c/b> ได้ (ทำไม่ได้ถ้าเปิดจากเว็บหลักเพราะ Apps Script รันในกรอบ iframe)\x3c/p>' +
+      step(1, 'ผูกบัญชี LINE', 'พนักงานเปิดหน้ามือถือผ่าน LINE ล็อกอินด้วยชื่อผู้ใช้/รหัสผ่านครั้งแรกครั้งเดียว หลังจากนั้นเปิดจาก LINE จะเข้าระบบอัตโนมัติ') +
+      step(2, 'ยกเลิกการผูกบัญชี', 'ทำได้เองจากเมนู โปรไฟล์ผู้ใช้ (มุมขวาบนของเว็บหลัก) → ยกเลิกการผูกบัญชี LINE') +
+      step(3, 'ตั้งค่าฝั่งแอดมิน', 'เมนู ตั้งค่า → หัวข้อ "เชื่อม LINE / มือถือ" มีขั้นตอนติดตั้งและช่องกรอก LINE Login Channel ID') +
+      tip('ผู้ดูแลระบบเห็นสถานะบัญชี LINE ของทุกคนได้ที่รายการผู้ใช้งาน')
+    ) +
+
+    /* ---------- 12. faq ---------- */
+    section('mnl-faq', 'bi-question-circle', '12. คำถามที่พบบ่อย',
+      '\x3cdiv class="accordion manual-faq" id="mnlFaqAcc">' +
+      [
+        ['ทำไมรูปสินค้า/โลโก้อัปโหลดแล้วไม่ขึ้น?',
+          'ต้องตั้งค่า \x3cb>Drive Folder ID\x3c/b> ในหน้าตั้งค่าก่อน (เปิดโฟลเดอร์ใน Google Drive แล้วคัดลอก ID จาก URL มาวาง) ถ้าอัปโหลดสำเร็จแต่รูปยังไม่ขึ้น ให้ลองเปิดหน้านั้นใหม่ ลิงก์รูปจะถูกแปลงให้ใช้งานได้อัตโนมัติ'],
+        ['ทำไมสแกนด้วยกล้องในเว็บนี้ใช้ไม่ได้?',
+          'Google Apps Script บล็อกการเข้าถึงกล้องในหน้าเว็บที่รันอยู่ใน iframe ของตัวเอง ให้ใช้หน้ามือถือ (LIFF) แทน — ดูหัวข้อ "มือถือ / LINE"'],
+        ['LINE Notify แจ้งเตือนไม่ได้แล้ว ทำอย่างไร?',
+          'LINE Notify ปิดให้บริการถาวรแล้ว ระบบเปลี่ยนไปใช้ \x3cb>LINE Messaging API\x3c/b> แทน ต้องตั้งค่า Channel Access Token ในหน้าตั้งค่า (การ์ด "การแจ้งเตือนสินค้าใกล้หมด") และผู้รับต้องผูกบัญชี LINE ไว้แล้วด้วย'],
+        ['แก้ไขโค้ดแล้วทำไมเว็บยังเหมือนเดิม?',
+          'ต้องกด \x3cb>Deploy > Manage deployments > แก้ไข deployment เดิม > New version\x3c/b> ทุกครั้งหลังแก้โค้ด ไม่งั้นลิงก์ที่ใช้งานจริงจะยังเป็นโค้ดเวอร์ชันเก่า'],
+        ['ยิงบาร์โค้ดแล้วระบบบอกไม่พบสินค้า?',
+          'ถ้าอยู่หน้ารับเข้าหรือปรับปรุงยอด ระบบจะเปิดฟอร์มสร้างสินค้าใหม่ให้ทันทีพร้อมบาร์โค้ดที่ยิงไป กรอกชื่อแล้วบันทึกได้เลย หน้าอื่นต้องเพิ่มสินค้า/บาร์โค้ดในเมนู "สินค้า" ก่อน'],
+        ['ทำไมเบิกของจนติดลบไม่ได้?',
+          'ปกติระบบปิดกั้นไว้กันยอดผิดพลาด เปิดใช้งานได้ที่ ตั้งค่า → กฎการทำงานของสต๊อก → "อนุญาตให้เบิกจนยอดติดลบได้"'],
+        ['ลบสินค้า/เอกสารแล้วกู้คืนได้ไหม?',
+          'ลบสินค้าเป็นการลบถาวร ส่วนเอกสาร (รับเข้า/เบิกจ่าย ฯลฯ) แนะนำให้ใช้ "ยกเลิก" แทนการลบ เพราะยกเลิกจะคืนยอดสต๊อกให้อัตโนมัติและยังเก็บประวัติไว้ดูย้อนหลังได้']
+      ].map(function (f, i) {
+        return '\x3cdiv class="accordion-item border-0 border-bottom">' +
+          '\x3ch2 class="accordion-header">\x3cbutton class="accordion-button collapsed py-3" type="button" ' +
+          'data-bs-toggle="collapse" data-bs-target="#mnlFaq' + i + '">' +
+          '\x3ci class="bi bi-question-circle text-primary me-2">\x3c/i>' + f[0] + '\x3c/button>\x3c/h2>' +
+          '\x3cdiv id="mnlFaq' + i + '" class="accordion-collapse collapse" data-bs-parent="#mnlFaqAcc">' +
+          '\x3cdiv class="accordion-body py-3 ps-5">' + f[1] + '\x3c/div>\x3c/div>\x3c/div>';
+      }).join('') +
+      '\x3c/div>'
+    ) +
+
+    '\x3c/div>\x3c/div>';
+
+  SP.render(html);
+
+  function scrollToSection(id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    window.scrollTo({ top: el.offsetTop - 74, behavior: 'smooth' });
+  }
+  $('#content').on('click', '.manual-nav .nav-link', function (e) {
+    e.preventDefault();
+    scrollToSection($(this).data('goto'));
+    var coll = bootstrap.Collapse.getInstance(document.getElementById('mnlMobileToc'));
+    if (coll) coll.hide();
+  });
+
+  var sectionEls = toc.map(function (t) { return document.getElementById(t[0]); }).filter(Boolean);
+  function onScroll() {
+    // ออกจากหน้านี้ไปแล้ว (#mnlNav ถูกแทนที่โดยหน้าอื่น) — เลิกฟังต่อ กันหน่วงหน้าอื่น
+    if (!document.getElementById('mnlNav')) { $(window).off('scroll.manual'); return; }
+    var cur = sectionEls[0] ? sectionEls[0].id : '';
+    sectionEls.forEach(function (el) { if (window.scrollY >= el.offsetTop - 110) cur = el.id; });
+    $('#mnlNav .nav-link').removeClass('active');
+    $('#mnlNav .nav-link[data-goto="' + cur + '"]').addClass('active');
+  }
+  $(window).off('scroll.manual').on('scroll.manual', onScroll);
+  onScroll();
+
+  return Promise.resolve();
 };
 </script>

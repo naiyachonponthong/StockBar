@@ -126,7 +126,9 @@ SP._confirm = null;
 
 SP.ui.openForm = function (opt) {
   $('#spModalTitle').text(opt.title || 'แบบฟอร์ม');
-  $('#spModalBody').html(opt.body || '');
+  /* off() ก่อนวาดใหม่ทุกครั้ง — กัน delegated handler (เช่น .poQty ในฟอร์ม PO) ซ้อนกัน
+     เวลาเปิดฟอร์มเดิมซ้ำหลายรอบ ไม่งั้น handler เก่าจะยังจับ closure ของข้อมูลรอบก่อนอยู่ */
+  $('#spModalBody').off().html(opt.body || '');
   $('#spModalDialog').attr('class', 'modal-dialog modal-dialog-centered ' + (opt.size || ''));
   $('#spModalSave').text(opt.saveText || 'บันทึก').toggle(opt.hideSave !== true);
   $('#spModalSave').off('click').on('click', function () {
@@ -321,43 +323,18 @@ SP.scan = {
       '\x3cbutton data-m="auto" class="on">ยิงรัว +1\x3c/button>' +
       '\x3cbutton data-m="qty">ยิงแล้วใส่จำนวน\x3c/button>' +
       (opt.info === false ? '' : '\x3cbutton data-m="info">เช็คข้อมูล\x3c/button>') +
-      '\x3cbutton data-m="cam" class="ms-auto">\x3ci class="bi bi-camera">\x3c/i> กล้อง\x3c/button>' +
       '\x3c/div>' +
       '\x3cdiv class="scan-hint">' +
       SP.esc(opt.hint || 'ตั้งเครื่องยิงให้ลงท้ายด้วย Enter (suffix CR) · ช่องนี้จะโฟกัสอัตโนมัติ') +
       '\x3c/div>\x3c/div>';
   },
-  bindModes: function (id, onCam) {
+  bindModes: function (id) {
     $('#' + id + '_modes').off('click').on('click', 'button', function () {
       var m = $(this).data('m');
-      if (m === 'cam') { if (onCam) onCam(); return; }
       SP.scan.MODE = m;
-      $('#' + id + '_modes button[data-m!="cam"]').removeClass('on');
+      $('#' + id + '_modes button').removeClass('on');
       $(this).addClass('on');
       $('#' + id).focus();
-    });
-  },
-  /** สแกนด้วยกล้องมือถือ */
-  camera: function (onCode) {
-    var boxId = 'camBox_' + SP.uid();
-    SP.ui.openForm({
-      title: 'สแกนด้วยกล้อง',
-      hideSave: true,
-      body: '\x3cdiv id="' + boxId + '" style="width:100%">\x3c/div>' +
-        '\x3cdiv class="t-sub mt-2">หันกล้องไปที่บาร์โค้ด ระบบจะอ่านอัตโนมัติ\x3c/div>',
-      onShown: function () {
-        try {
-          var q = new Html5Qrcode(boxId);
-          SP._cam = q;
-          q.start({ facingMode: 'environment' }, { fps: 10, qrbox: { width: 250, height: 150 } },
-            function (txt) {
-              q.stop().then(function () { SP.ui.closeForm(); onCode(txt); });
-            }, function () { });
-        } catch (e) { SP.toast('เปิดกล้องไม่ได้: ' + e.message, 'bad'); }
-      }
-    });
-    $('#spModal').one('hidden.bs.modal', function () {
-      if (SP._cam) { try { SP._cam.stop(); } catch (e) { } SP._cam = null; }
     });
   }
 };
@@ -395,7 +372,7 @@ SP.startApp = function () {
     $('#topUserName').text(SP.user.name);
     $('#sideUser').text(SP.user.name);
     $('#topUserRole').text(SP.boot.roles[SP.user.role] || SP.user.role);
-    if (SP.boot.settings && SP.boot.settings.orgName) $('#brandOrg').text(SP.boot.settings.orgName);
+    SP.applyBranding(SP.boot.settings);
     // ซ่อนเมนูตามสิทธิ์
     $('#menu a[data-role]').each(function () {
       if (!SP.can($(this).data('role'))) $(this).hide();
@@ -453,6 +430,44 @@ SP.empty = function (text, icon) {
     SP.esc(text || 'ยังไม่มีข้อมูล') + '\x3c/div>';
 };
 
+/** แปลงลิงก์ไฟล์ Drive ให้เป็น endpoint thumbnail เสมอ (ฝังเป็น <img> ในหน้าที่รันอยู่ใน
+ *  iframe ของ Apps Script ได้จริง — ลิงก์รูปเก่าที่บันทึกไว้ก่อนแก้ (uc?export=view) จะใช้งานได้ต่อ
+ *  โดยไม่ต้องอัปโหลดใหม่ */
+SP.imgUrl = function (url) {
+  if (!url) return '';
+  var m = String(url).match(/[?&]id=([^&]+)/);
+  return m ? 'https://drive.google.com/thumbnail?id=' + m[1] + '&sz=w1000' : url;
+};
+
+/** เอาโลโก้/ชื่อหน่วยงานไปแปะที่หน้า login และแถบด้านข้าง */
+SP.applyBranding = function (b) {
+  if (!b) return;
+  if (b.orgName) $('#brandOrg').text(b.orgName);
+  if (b.logoUrl) {
+    var url = SP.imgUrl(b.logoUrl);
+    $('#loginMarkImg,#brandMarkImg').attr('src', url).show();
+    $('#loginMarkIcon,#brandMarkIcon').hide();
+  }
+};
+
+/** พิมพ์เฉพาะส่วนที่ระบุ — ส่วนอื่นของหน้าจะไม่ติดไปในกระดาษ
+ *  คู่กับกฎ @media print ของ .print-mode / .print-area ใน css_main */
+SP.printArea = function (selector) {
+  var $el = $(selector);
+  if (!$el.length) { window.print(); return; }
+  $el.addClass('print-area');
+  $('body').addClass('print-mode');
+  function cleanup() {
+    $('body').removeClass('print-mode');
+    $el.removeClass('print-area');
+    window.removeEventListener('afterprint', cleanup);
+  }
+  window.addEventListener('afterprint', cleanup);
+  window.print();
+  // สำรองไว้เผื่อเบราว์เซอร์ไม่ยิง afterprint (บางตัวใน iframe ไม่ยิง)
+  setTimeout(cleanup, 1500);
+};
+
 SP.exportCsv = function (filename, headers, rows) {
   var lines = [headers.join(',')];
   rows.forEach(function (r) {
@@ -472,6 +487,11 @@ SP.exportCsv = function (filename, headers, rows) {
    BOOTSTRAP UI EVENTS
    ============================================================ */
 $(function () {
+  // แสดงโลโก้/ชื่อหน่วยงานบนหน้า login ก่อนรู้ token (endpoint นี้ไม่ต้องล็อกอิน)
+  SP.srun('apiPublicBranding').then(function (r) {
+    if (r && r.status !== 'error') SP.applyBranding(r.data);
+  }, function () { });
+
   $('#btnLogin').on('click', SP.doLogin);
   $('#liPass, #liUser').on('keydown', function (e) { if (e.key === 'Enter') SP.doLogin(); });
 

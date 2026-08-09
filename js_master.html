@@ -56,7 +56,7 @@ SP.pages.products = function () {
           '\x3ctd class="mono">' + SP.esc(p.code) + '\x3c/td>' +
           '\x3ctd>\x3cdiv class="d-flex align-items-center gap-2">' +
           (p.imageUrl
-            ? '\x3cimg src="' + SP.esc(p.imageUrl) + '" style="width:32px;height:32px;object-fit:cover;border-radius:6px;flex:none">'
+            ? '\x3cimg src="' + SP.esc(SP.imgUrl(p.imageUrl)) + '" style="width:32px;height:32px;object-fit:cover;border-radius:6px;flex:none">'
             : '') +
           '\x3cdiv>\x3cdiv class="t-main">' + SP.esc(p.name) + '\x3c/div>' +
           (p.trackLot ? '\x3cspan class="badge-x b-ct">ล็อต\x3c/span> ' : '') +
@@ -134,7 +134,7 @@ SP.productForm = function (p) {
       SP.ui.field('pfName', 'ชื่อสินค้า', p.name, { wrap: 'col-md-8' })
     ) + '\x3cdiv class="mb-3">\x3clabel class="form-label">รูปสินค้า\x3c/label>' +
       '\x3cdiv class="d-flex align-items-center gap-3">' +
-      '\x3cimg id="pfImgPreview" src="' + SP.esc(p.imageUrl || '') + '" style="width:64px;height:64px;object-fit:cover;border-radius:8px;background:#f2f2f2' +
+      '\x3cimg id="pfImgPreview" src="' + SP.esc(SP.imgUrl(p.imageUrl)) + '" style="width:64px;height:64px;object-fit:cover;border-radius:8px;background:#f2f2f2' +
       (p.imageUrl ? '' : ';display:none') + '">' +
       '\x3cinput type="file" id="pfImage" class="form-control" accept="image/*" style="max-width:320px">' +
       '\x3c/div>\x3c/div>' + SP.ui.row(
@@ -193,7 +193,7 @@ SP.productForm = function (p) {
       SP.api('apiUploadFile', b64, f.name, f.type)
         .then(function (r) {
           SP._productImageUrl = r.data.url;
-          $('#pfImgPreview').attr('src', SP._productImageUrl).show();
+          $('#pfImgPreview').attr('src', SP.imgUrl(SP._productImageUrl)).show();
           SP.toast('อัปโหลดรูปแล้ว', 'ok');
         })
         .catch(function (er) { SP.toast(er.message, 'bad'); })
@@ -403,54 +403,91 @@ SP.pages.labels = function () {
   return SP.api('apiListProducts').then(function (r) {
     var prods = r.data || [];
     var s = SP.boot.settings || {};
+    var cart = []; // { productId, name, code, qty }
+
+    function cartHtml() {
+      if (!cart.length) return '\x3cdiv class="cart-empty">ยังไม่มีรายการ เลือกสินค้าด้านบนเพื่อเพิ่ม (เลือกได้หลายรายการ)\x3c/div>';
+      var h = '\x3ctable class="table-x">\x3cthead>\x3ctr>\x3cth>สินค้า\x3c/th>\x3cth>บาร์โค้ด\x3c/th>' +
+        '\x3cth class="text-num">จำนวนดวง\x3c/th>\x3cth>\x3c/th>\x3c/tr>\x3c/thead>\x3ctbody>';
+      cart.forEach(function (it, i) {
+        h += '\x3ctr>\x3ctd>' + SP.esc(it.name) + '\x3c/td>' +
+          '\x3ctd class="mono t-sub">' + SP.esc(it.code) + '\x3c/td>' +
+          '\x3ctd class="text-num">\x3cinput class="form-control form-control-sm qty-input lbQty" data-i="' + i +
+          '" type="number" min="1" value="' + it.qty + '">\x3c/td>' +
+          '\x3ctd class="text-end">\x3cbutton class="btn btn-light btn-icon text-danger lbDel" data-i="' + i +
+          '">\x3ci class="bi bi-x-lg">\x3c/i>\x3c/button>\x3c/td>\x3c/tr>';
+      });
+      h += '\x3c/tbody>\x3c/table>';
+      return h;
+    }
+
     SP.render(
-      SP.card('เลือกสินค้าที่จะพิมพ์',
+      SP.card('เลือกสินค้าที่จะพิมพ์ (เลือกได้หลายรายการ)',
         '\x3cdiv class="row g-2 align-items-end">' +
-        '\x3cdiv class="col-md-5 mb-3">\x3clabel class="form-label">สินค้า\x3c/label>\x3cdiv id="lbPick">\x3c/div>\x3c/div>' +
-        SP.ui.field('lbQty', 'จำนวนดวง', 12, { wrap: 'col-md-2', type: 'number' }) +
-        SP.ui.field('lbW', 'กว้าง (มม.)', s.labelWidth || 50, { wrap: 'col-md-2', type: 'number' }) +
-        SP.ui.field('lbH', 'สูง (มม.)', s.labelHeight || 25, { wrap: 'col-md-2', type: 'number' }) +
-        '\x3cdiv class="col-md-1 mb-3">\x3cbutton class="btn btn-primary w-100" id="lbGen">สร้าง\x3c/button>\x3c/div>' +
+        '\x3cdiv class="col-md-6 mb-3">\x3clabel class="form-label">สินค้า\x3c/label>\x3cdiv id="lbPick">\x3c/div>\x3c/div>' +
+        SP.ui.field('lbW', 'กว้าง (มม.)', s.labelWidth || 50, { wrap: 'col-md-3', type: 'number' }) +
+        SP.ui.field('lbH', 'สูง (มม.)', s.labelHeight || 25, { wrap: 'col-md-3', type: 'number' }) +
         '\x3c/div>' +
-        '\x3cdiv class="t-sub">สินค้าที่ยังไม่มีบาร์โค้ด ระบบจะใช้ "รหัสสินค้า" เป็นบาร์โค้ดให้อัตโนมัติ (CODE128) พิมพ์แล้วยิงได้ทันที\x3c/div>'
+        '\x3cdiv id="lbCart" class="mb-3">\x3c/div>' +
+        '\x3cdiv class="d-flex justify-content-end">\x3cbutton class="btn btn-primary" id="lbGen">สร้างสติกเกอร์\x3c/button>\x3c/div>' +
+        '\x3cdiv class="t-sub mt-2">สินค้าที่ยังไม่มีบาร์โค้ด ระบบจะใช้ "รหัสสินค้า" เป็นบาร์โค้ดให้อัตโนมัติ (CODE128) ' +
+        'สติกเกอร์พิมพ์ออกมาจะมีแค่บาร์โค้ด ไม่มีชื่อสินค้า พิมพ์แล้วยิงได้ทันที\x3c/div>'
       ) +
       SP.card('ตัวอย่างก่อนพิมพ์', '\x3cdiv id="lbSheet" class="label-sheet">\x3c/div>',
         '\x3cbutton class="btn btn-sm btn-light no-print" id="lbPrint">\x3ci class="bi bi-printer">\x3c/i> พิมพ์\x3c/button>')
     );
 
-    var pick = SP.ui.picker('lbPick', {
+    $('#lbCart').html(cartHtml());
+
+    SP.ui.picker('lbPick', {
       items: prods.map(function (p) {
         var bc = (p.barcodes || [])[0];
-        return { id: p.id, name: p.name, sub: (bc ? 'บาร์โค้ด ' + bc.barcode : 'ใช้รหัส ' + p.code) };
-      })
+        return { id: p.id, name: p.name, sub: (bc ? 'บาร์โค้ด ' + bc.barcode : 'ใช้รหัส ' + p.code), _code: bc ? bc.barcode : p.code };
+      }),
+      onPick: function (sel) {
+        var dup = cart.filter(function (c) { return c.productId === sel.id; })[0];
+        if (dup) { dup.qty += 12; }
+        else cart.push({ productId: sel.id, name: sel.name, code: sel._code, qty: 12 });
+        $('#lbCart').html(cartHtml());
+        $('#lbPick_q').val('');
+      }
+    });
+
+    $('#lbCart').on('input', '.lbQty', function () {
+      cart[$(this).data('i')].qty = Math.max(1, parseInt($(this).val(), 10) || 1);
+    });
+    $('#lbCart').on('click', '.lbDel', function () {
+      cart.splice($(this).data('i'), 1);
+      $('#lbCart').html(cartHtml());
     });
 
     $('#lbGen').on('click', function () {
-      var sel = pick.get();
-      if (!sel) { SP.toast('กรุณาเลือกสินค้า', 'bad'); return; }
-      var p = prods.filter(function (x) { return x.id === sel.id; })[0];
-      var bc = (p.barcodes || [])[0];
-      var code = bc ? bc.barcode : p.code;
-      var n = Math.max(1, parseInt($('#lbQty').val(), 10) || 1);
+      if (!cart.length) { SP.toast('กรุณาเลือกสินค้าอย่างน้อย 1 รายการ', 'bad'); return; }
       var w = SP.n($('#lbW').val()) || 50, hh = SP.n($('#lbH').val()) || 25;
-      var html = '';
-      for (var i = 0; i < n; i++) {
-        var id = 'bcimg_' + i;
-        html += '\x3cdiv class="label-item" style="width:' + w + 'mm;height:' + hh + 'mm">' +
-          '\x3cdiv class="lb-name" style="width:' + (w - 6) + 'mm">' + SP.esc(p.name) + '\x3c/div>' +
-          '\x3csvg id="' + id + '">\x3c/svg>\x3c/div>';
-      }
+      var html = '', jobs = [], idx = 0;
+      cart.forEach(function (it) {
+        for (var i = 0; i < it.qty; i++) {
+          var id = 'bcimg_' + idx;
+          html += '\x3cdiv class="label-item" style="width:' + w + 'mm;height:' + hh + 'mm">' +
+            '\x3csvg id="' + id + '">\x3c/svg>\x3c/div>';
+          jobs.push({ id: id, code: it.code });
+          idx++;
+        }
+      });
       $('#lbSheet').html(html);
-      for (var j = 0; j < n; j++) {
+      jobs.forEach(function (j) {
         try {
-          JsBarcode('#bcimg_' + j, String(code), {
-            format: 'CODE128', width: 1.4, height: (hh - 12) * 3.2,
+          JsBarcode('#' + j.id, String(j.code), {
+            format: 'CODE128', width: 1.4, height: (hh - 6) * 3.2,
             fontSize: 11, margin: 0, displayValue: true
           });
-        } catch (e) { SP.toast('สร้างบาร์โค้ดไม่สำเร็จ: ' + e.message, 'bad'); break; }
-      }
+        } catch (e) { SP.toast('สร้างบาร์โค้ดไม่สำเร็จ: ' + e.message, 'bad'); }
+      });
     });
-    $('#lbPrint').on('click', function () { window.print(); });
+    $('#lbPrint').on('click', function () {
+      if (!$('#lbSheet').children().length) { SP.toast('กด "สร้างสติกเกอร์" ก่อนพิมพ์', 'bad'); return; }
+      SP.printArea('#lbSheet');
+    });
   });
 };
 

@@ -16,7 +16,10 @@
 <div id="loginScreen" class="login-wrap">
   <div class="login-card">
     <div class="login-brand">
-      <div class="login-mark"><i class="bi bi-upc-scan"></i></div>
+      <div class="login-mark">
+        <i class="bi bi-upc-scan" id="loginMarkIcon"></i>
+        <img id="loginMarkImg" style="display:none;width:100%;height:100%;object-fit:cover;border-radius:inherit">
+      </div>
       <div>
         <div class="login-title">StockBar</div>
         <div class="login-sub">ระบบสต๊อกสินค้า รองรับเครื่องยิงบาร์โค้ด</div>
@@ -63,7 +66,10 @@
 
   <div class="sidebar" id="sidebar">
     <div class="brand">
-      <div class="brand-mark"><i class="bi bi-upc-scan"></i></div>
+      <div class="brand-mark">
+        <i class="bi bi-upc-scan" id="brandMarkIcon"></i>
+        <img id="brandMarkImg" style="display:none;width:100%;height:100%;object-fit:cover;border-radius:inherit">
+      </div>
       <div>
         <div class="brand-name">StockBar</div>
         <div class="brand-org" id="brandOrg">ระบบสต๊อกสินค้า</div>
@@ -104,6 +110,7 @@
       <a href="#users" data-page="users" data-role="admin"><i class="bi bi-people"></i> ผู้ใช้งาน</a>
       <a href="#settings" data-page="settings" data-role="admin,manager"><i class="bi bi-gear"></i> ตั้งค่า</a>
       <a href="#logs" data-page="logs" data-role="admin"><i class="bi bi-clock-history"></i> ประวัติการใช้งาน</a>
+      <a href="#manual" data-page="manual"><i class="bi bi-book"></i> คู่มือการใช้งาน</a>
     </nav>
     <div class="sidebar-foot">v1.0 · <span id="sideUser">-</span></div>
   </div>
@@ -153,7 +160,6 @@
 <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
 <?!= include('js_core'); ?>
 <?!= include('js_master'); ?>
